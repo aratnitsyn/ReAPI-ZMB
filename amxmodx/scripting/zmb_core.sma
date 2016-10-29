@@ -10,14 +10,14 @@
 #pragma semicolon				1
 
 #define PLUGIN_NAME				"[ZMB] Core"
-#define PLUGIN_VERS				"0.0.3"
+#define PLUGIN_VERS				"0.0.3a"
 #define PLUGIN_AUTH				"81x08"
 
-#define SetBit(%0,%1) 			((%0) |= (1 << (%1)))
-#define ClearBit(%0,%1) 		((%0) &= ~(1 << (%1)))
-#define IsSetBit(%0,%1) 		((%0) & (1 << (%1)))
+#define SetBit(%0,%1)			((%0) |= (1 << (%1)))
+#define ClearBit(%0,%1)			((%0) &= ~(1 << (%1)))
+#define IsSetBit(%0,%1)			((%0) & (1 << (%1)))
 #define InvertBit(%0,%1)		((%0) ^= (1 << (%1)))
-#define IsNotSetBit(%0,%1) 		(~(%0) & (1 << (%1)))
+#define IsNotSetBit(%0,%1)		(~(%0) & (1 << (%1)))
 
 #define IsPlayer(%0)			(%0 && %0 <= g_iMaxPlayers)
 
@@ -30,7 +30,7 @@
 #define CLASS_NONE				0
 
 const MsgId_TextMsg				= 77;
-const MsgId_SendAudio 			= 100;
+const MsgId_SendAudio			= 100;
 const MsgId_ScreenFade			= 98;
 
 enum (+= 35)	{
@@ -140,7 +140,8 @@ new g_iPrimaryWeapons,
 
 new g_infoZombieClass[MAX_CLASSES][infoClass];
 
-new bool: g_bRoundEnd;
+new bool: g_bRoundEnd,
+	bool: g_bInfectionBegan;
 
 new gp_iBit[bitsPlayer],
 	gp_iClass[MAX_PLAYERS + 1],
@@ -547,8 +548,8 @@ Cvars_Cfg()	{
 		iCvarId_GameDescription;
 
 	iCvarId_HudType			= register_cvar("zmb_hud_type", "0");
-	iCvarId_HudColor		= register_cvar("zmb_hud_color", "#FF00FF");
-	iCvarId_HudPosition		= register_cvar("zmb_hud_position", "0.03 0.93");
+	iCvarId_HudColor		= register_cvar("zmb_hud_color", "#008000");
+	iCvarId_HudPosition		= register_cvar("zmb_hud_position", "-1.0 0.85");
 	iCvarId_ZombieRatio		= register_cvar("zmb_zombie_ratio", "2");
 	iCvarId_MapLightStyle	= register_cvar("zmb_map_lightstyle", "d");
 	iCvarId_SaveEquipment	= register_cvar("zmb_save_equipment", "0");
@@ -621,14 +622,14 @@ public client_putinserver(iIndex)	{
 	
 	if(g_iCvar_SaveEquipment)
 	{
-		static sSteamId[35];
-		get_user_authid(iIndex, sSteamId, charsmax(sSteamId));
+		static szSteamId[35];
+		get_user_authid(iIndex, szSteamId, charsmax(szSteamId));
 		
-		if(TrieKeyExists(g_tEquipment, sSteamId))
+		if(TrieKeyExists(g_tEquipment, szSteamId))
 		{
-			TrieGetArray(g_tEquipment, sSteamId, gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
+			TrieGetArray(g_tEquipment, szSteamId, gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
 
-			TrieDeleteKey(g_tEquipment, sSteamId);
+			TrieDeleteKey(g_tEquipment, szSteamId);
 		}
 	}
 	
@@ -660,10 +661,10 @@ public client_disconnect(iIndex)	{
 		}
 		case 1:
 		{
-			static sSteamId[35];
-			get_user_authid(iIndex, sSteamId, charsmax(sSteamId));
+			static szSteamId[35];
+			get_user_authid(iIndex, szSteamId, charsmax(szSteamId));
 			
-			TrieSetArray(g_tEquipment, sSteamId, gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
+			TrieSetArray(g_tEquipment, szSteamId, gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
 		}
 	}
 	
@@ -692,8 +693,6 @@ public EventHook_InitHUD(const iIndex)	{
 }
 
 public EventHook_HLTV()	{
-	log_amx("EventHook_HLTV");
-	
 	g_bRoundEnd = false;
 	
 	rg_balance_teams();
@@ -714,13 +713,11 @@ public EventHook_HLTV()	{
 }
 
 public LogEventHook_RoundStart()	{
-	log_amx("LogEventHook_RoundStart");
 }
 
 public LogEventHook_RoundEnd()	{
-	log_amx("LogEventHook_RoundEnd");
-	
 	g_bRoundEnd = true;
+	g_bInfectionBegan = false;
 	
 	remove_task(TASK_ID_INFECT);
 }
@@ -809,8 +806,6 @@ public HC_CBasePlayer_Spawn_Post(const iIndex)	{
 			givePlayerPrimaryWeapon(iIndex, iPrimaryWeaponId);
 			givePlayerSecondaryWeapon(iIndex, iSecondaryWeaponId);
 			givePlayerGrenades(iIndex);
-			
-			rg_set_user_armor(iIndex, 100, ARMOR_VESTHELM);
 		}
 		
 		if(gp_iSelectedClass[iIndex] != CLASS_NONE)
@@ -825,13 +820,16 @@ public HC_CBasePlayer_Spawn_Post(const iIndex)	{
 public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 	if(IsSetBit(gp_iBit[BIT_INFECT], iVictim))
 	{
-		ClearBit(gp_iBit[BIT_INFECT], iVictim);
-		
 		remove_task(TASK_ID_PLAYER_HUD + iVictim);
 	}
 }
 
 public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDamage)	{
+	if(!(g_bInfectionBegan))
+	{
+		return HC_CONTINUE;
+	}
+	
 	if(IsSetBit(gp_iBit[BIT_INFECT], iAttacker))
 	{
 		if(g_bRoundEnd)
@@ -842,9 +840,7 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 		}
 		
 		fDamage *= g_infoZombieClass[gp_iClass[iAttacker]][CLASS_FACTOR_DMG];
-		
-		log_amx("damage = %f", fDamage);
-		
+
 		SetHookChainArg(3, ATYPE_FLOAT, fDamage);
 	}
 	
@@ -991,6 +987,8 @@ public HamHook_Knife_Deploy_Post(const iEntity)	{
 			{
 				set_pev_string(iIndex, pev_viewmodel2, sViewModel);
 			}
+			
+			set_pev(iIndex, pev_weaponmodel2, "");
 		}
 	}
 	
@@ -1011,10 +1009,24 @@ public HamHook_Player_MaxSpeed_Post(iIndex)	{
  [ClCmd]
 =================================================================================*/
 ClCmd_Init()	{
+	register_clcmd("drop", "ClCmd_Drop");
+	
 	register_clcmd("say /equip", "ClCmd_Equipment");
 	
 	register_clcmd("jointeam", "ClCmd_Block");
 	register_clcmd("joinclass", "ClCmd_Block");
+}
+
+public ClCmd_Drop(const iIndex)	{
+	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+	{
+		if(get_user_weapon(iIndex) == CSW_KNIFE)
+		{
+			return PLUGIN_HANDLED;
+		}
+	}
+	
+	return PLUGIN_CONTINUE;
 }
 
 public ClCmd_Equipment(const iIndex)	{
@@ -1235,9 +1247,7 @@ public Handler_Equipment(const iIndex, const iKey)	{
 			givePlayerSecondaryWeapon(iIndex, iSecondaryWeaponId);
 			
 			givePlayerGrenades(iIndex);
-			
-			rg_set_user_armor(iIndex, 100, ARMOR_VESTHELM);
-			
+
 			if(iKey == 2) ClearBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
 		}
 	}
@@ -1408,8 +1418,6 @@ public Handler_SecondaryWeapons(const iIndex, const iKey)	{
 				
 				givePlayerSecondaryWeapon(iIndex, iWeaponId);
 				givePlayerGrenades(iIndex);
-				
-				rg_set_user_armor(iIndex, 100, ARMOR_VESTHELM);
 			}
 		}
 	}
@@ -1421,6 +1429,8 @@ public Handler_SecondaryWeapons(const iIndex, const iKey)	{
  [ZMB]
 =================================================================================*/
 public taskInfect()	{
+	g_bInfectionBegan = true;
+	
 	new iIndex, iPlayersNum, iPlayers[MAX_PLAYERS + 1];
 
 	for(iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
