@@ -695,6 +695,11 @@ public EventHook_InitHUD(const iIndex)	{
 public EventHook_HLTV()	{
 	g_bRoundEnd = false;
 	
+	for(new iCount = 0; iCount < 13; iCount++)
+	{
+		DisableHamForward(g_iHamFwd_Entity_Block[iCount]);
+	}
+	
 	rg_balance_teams();
 	
 	for(new iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
@@ -1480,6 +1485,11 @@ public Handler_SecondaryWeapons(const iIndex, const iKey)	{
 public taskInfect()	{
 	g_bInfectionBegan = true;
 	
+	for(new iCount = 0; iCount < 13; iCount++)
+	{
+		EnableHamForward(g_iHamFwd_Entity_Block[iCount]);
+	}
+	
 	new iIndex, iPlayersNum, iPlayers[MAX_PLAYERS + 1];
 
 	for(iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
@@ -1594,7 +1604,7 @@ public taskPlayerHud(iIndex)	{
 }
 
 stock givePlayerPrimaryWeapon(const iIndex, const iPrimaryWeaponId)	{
-	if(iPrimaryWeaponId != 0)
+	if(iPrimaryWeaponId)
 	{
 		gp_iEquipment[iIndex][PLAYER_EQUIPMENT_PRIMARY] = iPrimaryWeaponId;
 
