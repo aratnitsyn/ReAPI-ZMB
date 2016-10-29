@@ -13,11 +13,11 @@
 #define PLUGIN_VERS				"0.0.3a"
 #define PLUGIN_AUTH				"81x08"
 
-#define SetBit(%0,%1)			((%0) |= (1 << (%1)))
-#define ClearBit(%0,%1)			((%0) &= ~(1 << (%1)))
-#define IsSetBit(%0,%1)			((%0) & (1 << (%1)))
-#define InvertBit(%0,%1)		((%0) ^= (1 << (%1)))
-#define IsNotSetBit(%0,%1)		(~(%0) & (1 << (%1)))
+#define SetBit(%0,%1)			((%0) |= (1 << (%1 - 1)))
+#define ClearBit(%0,%1)			((%0) &= ~(1 << (%1 - 1)))
+#define IsSetBit(%0,%1)			((%0) & (1 << (%1 - 1)))
+#define InvertBit(%0,%1)		((%0) ^= (1 << (%1 - 1)))
+#define IsNotSetBit(%0,%1)		(~(%0) & (1 << (%1 - 1)))
 
 #define IsPlayer(%0)			(%0 && %0 <= g_iMaxPlayers)
 
@@ -111,6 +111,8 @@ new g_iFakeMetaFwd_Spawn;
 
 new Ham: g_iHamFwd_Player_Speed = Ham_Item_PreFrame;
 
+new HamHook: g_iHamFwd_Entity_Block[13];
+
 new g_iCvar_HudType,
 	g_iCvar_HudColor[Color],
 	Float: g_fCvar_HudPosition[Positon];
@@ -149,6 +151,8 @@ new gp_iBit[bitsPlayer],
 	gp_iEquipment[MAX_PLAYERS + 1][playerEquipment];
 	
 new gp_iMenuPosition[MAX_PLAYERS + 1];
+
+new gp_szSteamId[MAX_PLAYERS + 1][35];
 
 new	Trie: g_tEquipment,
 	Trie: g_tRemoveEntities;
@@ -622,14 +626,13 @@ public client_putinserver(iIndex)	{
 	
 	if(g_iCvar_SaveEquipment)
 	{
-		static szSteamId[35];
-		get_user_authid(iIndex, szSteamId, charsmax(szSteamId));
+		get_user_authid(iIndex, gp_szSteamId[iIndex], charsmax(gp_szSteamId[]));
 		
-		if(TrieKeyExists(g_tEquipment, szSteamId))
+		if(TrieKeyExists(g_tEquipment, gp_szSteamId[iIndex]))
 		{
-			TrieGetArray(g_tEquipment, szSteamId, gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
+			TrieGetArray(g_tEquipment, gp_szSteamId[iIndex], gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
 
-			TrieDeleteKey(g_tEquipment, szSteamId);
+			TrieDeleteKey(g_tEquipment, gp_szSteamId[iIndex]);
 		}
 	}
 	
@@ -661,10 +664,7 @@ public client_disconnect(iIndex)	{
 		}
 		case 1:
 		{
-			static szSteamId[35];
-			get_user_authid(iIndex, szSteamId, charsmax(szSteamId));
-			
-			TrieSetArray(g_tEquipment, szSteamId, gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
+			TrieSetArray(g_tEquipment, gp_szSteamId[iIndex], gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
 		}
 	}
 	
@@ -972,6 +972,43 @@ public FMHook_EmitSound_Pre(const iIndex, const iChannel, const szSample[], cons
 Hamsandwich_Init()	{
 	RegisterHam(Ham_Item_Deploy, "weapon_knife", "HamHook_Knife_Deploy_Post", true);
 	RegisterHam(g_iHamFwd_Player_Speed, "player", "HamHook_Player_MaxSpeed_Post", true);
+	
+	new const szEntityClass[][] =
+	{
+		"func_vehicle", 		// Управляемая машина
+		"func_tracktrain", 		// Управляемый поезд
+		"func_tank", 			// Управляемая пушка
+		"game_player_hurt",	 	// При активации наносит игроку повреждения
+		"func_recharge", 		// Увеличение запаса бронижелета
+		"func_healthcharger", 	// Увеличение процентов здоровья
+		"game_player_equip", 	// Выдаёт оружие
+		"player_weaponstrip", 	// Забирает всё оружие
+		"trigger_hurt", 		// Наносит игроку повреждения
+		"trigger_gravity", 		// Устанавливает игроку силу гравитации
+		"armoury_entity", 		// Объект лежащий на карте, оружия, броня или гранаты
+		"weaponbox", 			// Оружие выброшенное игроком
+		"weapon_shield" 		// Щит
+	};
+	
+	new iCount;
+	
+	for(iCount = 0; iCount <= 7; iCount++)
+	{
+		DisableHamForward(
+			g_iHamFwd_Entity_Block[iCount] = RegisterHam(
+				Ham_Use, szEntityClass[iCount], "HamHook_EntityBlock_Pre", false
+			)
+		);
+	}
+	
+	for(iCount = 8; iCount <= 12; iCount++)
+	{
+		DisableHamForward(
+			g_iHamFwd_Entity_Block[iCount] = RegisterHam(
+				Ham_Touch, szEntityClass[iCount], "HamHook_EntityBlock_Pre", false
+			)
+		);
+	}
 }
 
 public HamHook_Knife_Deploy_Post(const iEntity)	{
@@ -1003,6 +1040,18 @@ public HamHook_Player_MaxSpeed_Post(iIndex)	{
 			set_entvar(iIndex, var_maxspeed, g_infoZombieClass[gp_iClass[iIndex]][CLASS_SPEED]);
 		}
 	}
+}
+
+public HamHook_EntityBlock_Pre(const iEntity, const iIndex)	{
+	if(IsPlayer(iIndex))
+	{
+		if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+		{
+			return HAM_SUPERCEDE;
+		}
+	}
+
+	return HAM_IGNORED;
 }
 
 /*================================================================================
@@ -1200,8 +1249,8 @@ ShowMenu_Equipment(const iIndex)	{
 	
 	static iPrimaryWeaponId; iPrimaryWeaponId = gp_iEquipment[iIndex][PLAYER_EQUIPMENT_PRIMARY];
 	static iSecondaryWeaponId; iSecondaryWeaponId = gp_iEquipment[iIndex][PLAYER_EQUIPMENT_SECONDARY];
-	
-	if(!(iPrimaryWeaponId) && !(iSecondaryWeaponId))
+
+	if(!(iPrimaryWeaponId) || !(iSecondaryWeaponId))
 	{
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \dПредыдущие снаряжие^n^n");
 	}
@@ -1211,7 +1260,7 @@ ShowMenu_Equipment(const iIndex)	{
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \wПредыдущие снаряжие \r[ \d%s | %s \r]^n^n", g_listPrimaryWeaponszMenu[iPrimaryWeaponId], g_listSecondaryWeaponszMenu[iSecondaryWeaponId]);
 	}
 	
-	if(!(iPrimaryWeaponId) && !(iSecondaryWeaponId))
+	if(!(iPrimaryWeaponId) || !(iSecondaryWeaponId))
 	{
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[3] \dБольше не показывать меню^n^n^n^n^n^n^n");
 	}
@@ -1545,17 +1594,23 @@ public taskPlayerHud(iIndex)	{
 }
 
 stock givePlayerPrimaryWeapon(const iIndex, const iPrimaryWeaponId)	{
-	gp_iEquipment[iIndex][PLAYER_EQUIPMENT_PRIMARY] = iPrimaryWeaponId;
+	if(iPrimaryWeaponId != 0)
+	{
+		gp_iEquipment[iIndex][PLAYER_EQUIPMENT_PRIMARY] = iPrimaryWeaponId;
 
-	rg_give_item(iIndex, g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_CLASSNAME], GT_REPLACE);
-	rg_set_user_bpammo(iIndex, g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_ID], g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_BPAMMO]);
+		rg_give_item(iIndex, g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_CLASSNAME], GT_REPLACE);
+		rg_set_user_bpammo(iIndex, g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_ID], g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_BPAMMO]);
+	}
 }
 
 stock givePlayerSecondaryWeapon(const iIndex, const iSecondaryWeaponId)	{
-	gp_iEquipment[iIndex][PLAYER_EQUIPMENT_SECONDARY] = iSecondaryWeaponId;
+	if(iSecondaryWeaponId)
+	{
+		gp_iEquipment[iIndex][PLAYER_EQUIPMENT_SECONDARY] = iSecondaryWeaponId;
 
-	rg_give_item(iIndex, g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_CLASSNAME], GT_REPLACE);
-	rg_set_user_bpammo(iIndex, g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_ID], g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_BPAMMO]);
+		rg_give_item(iIndex, g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_CLASSNAME], GT_REPLACE);
+		rg_set_user_bpammo(iIndex, g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_ID], g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_BPAMMO]);
+	}
 }
 
 stock givePlayerGrenades(const iIndex)	{
