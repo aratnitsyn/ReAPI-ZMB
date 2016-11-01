@@ -10,7 +10,7 @@
 #pragma semicolon				1
 
 #define PLUGIN_NAME				"[ZMB] Core"
-#define PLUGIN_VERS				"0.0.3a"
+#define PLUGIN_VERS				"0.0.4"
 #define PLUGIN_AUTH				"81x08"
 
 #define SetBit(%0,%1)			((%0) |= (1 << (%1 - 1)))
@@ -24,19 +24,17 @@
 #define MAX_PLAYERS				32
 #define MAX_CLASSES				10
 
-#define FOG_COLOR				"128 128 128"
-#define FOG_DENSITY				"0.0012"
-
 #define CLASS_NONE				0
 
 const MsgId_TextMsg				= 77;
+const MsgId_ReceiveW			= 129;
 const MsgId_SendAudio			= 100;
 const MsgId_ScreenFade			= 98;
+const MsgId_HideWeapon			= 94;
 
 enum (+= 35)	{
 	TASK_ID_INFECT,
-	TASK_ID_LIGTH_STYLE,
-	
+
 	TASK_ID_PLAYER_HUD
 };
 
@@ -77,6 +75,7 @@ enum listWeaponInfo	{
 enum _: bitsPlayer	{
 	BIT_NONE,
 	
+	BIT_ALIVE,
 	BIT_INFECT,
 	BIT_CONNECTED,
 	BIT_MENU_EQUIPMENT,
@@ -109,24 +108,30 @@ new const g_listGrenades[] =	{
 
 new g_iFakeMetaFwd_Spawn;
 
-new Ham: g_iHamFwd_Player_Speed = Ham_Item_PreFrame;
-
 new HamHook: g_iHamFwd_Entity_Block[13];
 
 new g_iCvar_HudType,
-	g_iCvar_HudColor[Color],
+	g_iCvar_SaveEquipment,
+	g_iCvar_TimeInfections,
+	g_iCvar_HudColor[Color];
+	
+new Float: g_fCvar_ZombieRatio,
 	Float: g_fCvar_HudPosition[Positon];
 	
-new g_iCvar_ZombieRatio,
-	g_iCvar_SaveEquipment,
-	g_iCvar_TimeInfections;
-
 new g_szCvar_MapLightStyle[2],
 	g_szCvar_GameDescription[64];
-	
+
 new g_iMaxPlayers,
-	g_iZombieClasses;
-	
+	g_iAliveHumans,
+	g_iZombieClasses,
+	g_iActiveWeather;
+
+new g_iFog,
+	g_iWeather;
+
+new g_szFogColor[12],
+	g_szFogDensity[8];
+
 new g_iSyncPlayerHud;
 
 new g_iSizeSoundsSurvirvorWin;
@@ -169,10 +174,10 @@ new Array: g_aSoundsZombieDie,
  [PLUGIN]
 =================================================================================*/
 public plugin_precache()	{
+	LoadMain();
 	LoadSounds();
 	LoadClasses();
 
-	FakeMeta_EnvFog();
 	FakeMeta_RemoveEntities();
 }
 
@@ -198,17 +203,118 @@ public plugin_init()	{
 }
 
 public plugin_cfg()	{
- 	set_cvar_string("mp_refill_bpammo_weapons",	"2");
-	set_cvar_string("humans_join_team",	"any");
-	set_cvar_string("mp_auto_join_team","1");
-	set_cvar_string("sv_skyname", "drkg");
-	
 	Cvars_Cfg();
 }
 
 /*================================================================================
  [PRECACHE]
 =================================================================================*/
+LoadMain()	{
+	new szFileDir[128];
+	get_localinfo("amxx_configsdir", szFileDir, charsmax(szFileDir));
+	
+	formatex(szFileDir, charsmax(szFileDir), "%s/zmb/zmb_main.ini", szFileDir);
+
+	switch(file_exists(szFileDir))
+	{
+		case 0:
+		{
+			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szFileDir);
+		}
+		case 1:
+		{
+			ReadFile_Main(szFileDir);
+		}
+	}
+}
+
+ReadFile_Main(const szFileDir[])	{
+	new iFile = fopen(szFileDir, "rt");
+	
+	if(iFile)
+	{
+		new iStrLen;
+		new szBuffer[128], szBlock[32], szKey[32], szValue[64];
+
+		while(!(feof(iFile)))
+		{
+			fgets(iFile, szBuffer, charsmax(szBuffer));
+			trim(szBuffer);
+
+			if(!(szBuffer[0]) || szBuffer[0] == ';' || szBuffer[0] == '#')
+				continue;
+			
+			iStrLen = strlen(szBuffer);
+			
+			if(szBuffer[0] == '[' && szBuffer[iStrLen - 1] == ']')
+			{
+				copyc(szBlock, charsmax(szBlock), szBuffer[1], szBuffer[iStrLen - 1]);
+
+				continue;
+			}
+			
+			if(szBlock[0])
+			{
+				strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
+				
+				trim(szKey);
+				trim(szValue);
+				
+				remove_quotes(szKey);
+				remove_quotes(szValue);
+				
+				switch(szBlock[0])
+				{
+					case 'w':
+					{
+						if(equali(szBlock, "weather", 7))
+						{
+							switch(szKey[0])
+							{
+								case 'w':
+								{
+									if(equali(szKey, "weather", 7))
+									{
+										g_iWeather = read_flags(szValue);
+									}
+								}
+								case 'f':
+								{
+									if(equali(szKey, "fog"))
+									{
+										g_iFog = str_to_num(szValue);
+										
+										continue;
+									}
+									
+									if(equali(szKey, "fog_color", 9))
+									{
+										formatex(g_szFogColor, charsmax(g_szFogColor), szValue);
+									
+										continue;
+									}
+									
+									if(equali(szKey, "fog_density", 11))
+									{
+										formatex(g_szFogDensity, charsmax(g_szFogDensity), szValue);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		fclose(iFile);
+		
+		if(g_iFog)
+		{
+			FakeMeta_EnvFog();
+		}
+	}
+}
+
 LoadSounds()	{
 	new szFileDir[128];
 	get_localinfo("amxx_configsdir", szFileDir, charsmax(szFileDir));
@@ -421,7 +527,7 @@ ReadFile_Classes(const szFileDir[])	{
 				continue;
 			
 			iStrLen = strlen(szBuffer);
-			
+
 			if(szBuffer[0] == '[' && szBuffer[iStrLen - 1] == ']')
 			{
 				new szName[64];
@@ -449,7 +555,7 @@ ReadFile_Classes(const szFileDir[])	{
 				continue;
 			}
 
-			if(infoZombieClass[CLASS_NAME])
+			if(infoZombieClass[CLASS_NAME][0] != ' ')
 			{
 				strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
 				
@@ -554,7 +660,7 @@ Cvars_Cfg()	{
 	iCvarId_HudType			= register_cvar("zmb_hud_type", "0");
 	iCvarId_HudColor		= register_cvar("zmb_hud_color", "#008000");
 	iCvarId_HudPosition		= register_cvar("zmb_hud_position", "-1.0 0.85");
-	iCvarId_ZombieRatio		= register_cvar("zmb_zombie_ratio", "2");
+	iCvarId_ZombieRatio		= register_cvar("zmb_zombie_ratio", "0.2");
 	iCvarId_MapLightStyle	= register_cvar("zmb_map_lightstyle", "d");
 	iCvarId_SaveEquipment	= register_cvar("zmb_save_equipment", "0");
 	iCvarId_TimeInfections	= register_cvar("zmb_time_infections", "15");
@@ -591,10 +697,10 @@ Cvars_Cfg()	{
 	g_fCvar_HudPosition[POS_X] 		= str_to_float(szPosition[POS_X]);
 	g_fCvar_HudPosition[POS_Y] 		= str_to_float(szPosition[POS_Y]);
 	
-	g_iCvar_ZombieRatio				= get_pcvar_num(iCvarId_ZombieRatio);
+	g_fCvar_ZombieRatio				= get_pcvar_float(iCvarId_ZombieRatio);
 	g_iCvar_SaveEquipment			= get_pcvar_num(iCvarId_SaveEquipment);
 	g_iCvar_TimeInfections			= get_pcvar_num(iCvarId_TimeInfections);
-	
+
 	get_pcvar_string(iCvarId_MapLightStyle, g_szCvar_MapLightStyle, charsmax(g_szCvar_MapLightStyle));
 	get_pcvar_string(iCvarId_GameDescription, g_szCvar_GameDescription, charsmax(g_szCvar_GameDescription));
 
@@ -635,7 +741,7 @@ public client_putinserver(iIndex)	{
 			TrieDeleteKey(g_tEquipment, gp_szSteamId[iIndex]);
 		}
 	}
-	
+
 	return PLUGIN_CONTINUE;
 }
 
@@ -648,6 +754,10 @@ public client_disconnect(iIndex)	{
 	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
 		remove_task(TASK_ID_PLAYER_HUD + iIndex);
+	}
+	else
+	{
+		g_iAliveHumans--;
 	}
 	
 	for(new iCount = BIT_NONE; iCount < BIT_MAX; iCount++)
@@ -684,24 +794,32 @@ Event_Init()	{
 }
 
 public EventHook_InitHUD(const iIndex)	{
-	message_begin(MSG_ONE, SVC_LIGHTSTYLE, {0, 0, 0}, iIndex);
+	if(g_szCvar_MapLightStyle[0])
 	{
-		write_byte(0);
-		write_string(g_szCvar_MapLightStyle);
+		message_begin(MSG_ONE, SVC_LIGHTSTYLE, {0, 0, 0}, iIndex);
+		{
+			write_byte(0);
+			write_string(g_szCvar_MapLightStyle);
+		}
+		message_end();
 	}
-	message_end();
+	
+	if(g_iActiveWeather)
+	{
+		setPlayerWeather(iIndex, g_iActiveWeather);
+	}
 }
 
 public EventHook_HLTV()	{
 	g_bRoundEnd = false;
 	
+	rg_balance_teams();
+	
 	for(new iCount = 0; iCount < 13; iCount++)
 	{
 		DisableHamForward(g_iHamFwd_Entity_Block[iCount]);
 	}
-	
-	rg_balance_teams();
-	
+
 	for(new iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
 	{
 		if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
@@ -711,13 +829,40 @@ public EventHook_HLTV()	{
 			remove_task(TASK_ID_PLAYER_HUD + iIndex);
 			
 			rg_reset_user_model(iIndex);
+			
+			new iItem = get_member(iIndex, m_pActiveItem);
+			
+			if(iItem > 0)
+			{
+				ExecuteHamB(Ham_Item_Deploy, iItem);
+			}
+		}
+		
+		if(IsSetBit(gp_iBit[BIT_CONNECTED], iIndex))
+		{
+			if(g_iWeather)
+			{
+				g_iActiveWeather = g_iWeather;
+				
+				/* [RANDOM] */
+				if(g_iActiveWeather == 3)
+				{
+					g_iActiveWeather = random_num(1, 2);
+				}
+
+				setPlayerWeather(iIndex, g_iActiveWeather);
+			}
 		}
 	}
 
-	set_task(float(g_iCvar_TimeInfections), "taskInfect", TASK_ID_INFECT);
+	g_iAliveHumans = 0;
 }
 
 public LogEventHook_RoundStart()	{
+	if(!(g_bRoundEnd) && !(g_bInfectionBegan))
+	{
+		set_task(float(g_iCvar_TimeInfections), "taskInfect", TASK_ID_INFECT);
+	}
 }
 
 public LogEventHook_RoundEnd()	{
@@ -735,15 +880,35 @@ public LogEventHook_RestartGame()	{
  [MESSAGE]
 =================================================================================*/
 Message_Init()	{
-	/* register_message(MsgId_TextMsg, "MessageHook_TextMsg"); */
+	register_message(MsgId_TextMsg, "MessageHook_TextMsg");
 	register_message(MsgId_SendAudio, "MessageHook_SendAudio");
 }
 
 public MessageHook_TextMsg()	{
-	new szArg[32];
+	new szArg[14];
 	get_msg_arg_string(2, szArg, charsmax(szArg));
 
-	return PLUGIN_CONTINUE;
+	switch(szArg[1])
+	{
+		case 'T':
+		{
+			if(equal(szArg[1], "Target_Saved", 12))
+			{
+				set_msg_arg_string(2, "На этот раз ничья...");
+			}
+			else if(equal(szArg[1], "Terrorist_Win", 13))
+			{
+				set_msg_arg_string(2, "Зомби захватили весь мир!");
+			}
+		}
+		case 'C':
+		{
+			if(equal(szArg[1], "CTs_Win", 7))
+			{
+				set_msg_arg_string(2, "Люди победили заразу!");
+			}
+		}
+	}
 }
 
 public MessageHook_SendAudio()	{
@@ -771,8 +936,6 @@ public MessageHook_SendAudio()	{
 			}
 		}
 	}
-
-	return PLUGIN_CONTINUE;
 }
 
 /*================================================================================
@@ -781,6 +944,7 @@ public MessageHook_SendAudio()	{
 ReAPI_Init()	{
 	RegisterHookChain(RG_ShowVGUIMenu, "HC_ShowVGUIMenu_Pre", false);
 	RegisterHookChain(RG_CBasePlayer_Spawn, "HC_CBasePlayer_Spawn_Post", true);
+	RegisterHookChain(RG_CSGameRules_GiveC4, "HC_CSGameRules_GiveC4_Pre", false);
 	RegisterHookChain(RG_CBasePlayer_Killed, "HC_CBasePlayer_Killed_Post", true);
 	RegisterHookChain(RG_CBasePlayer_TraceAttack, "HC_CBasePlayer_TraceAttack_Pre", false);
 }
@@ -799,6 +963,11 @@ public HC_ShowVGUIMenu_Pre(const iIndex, const VGUIMenu: iMenuType)	{
 public HC_CBasePlayer_Spawn_Post(const iIndex)	{
 	if(is_user_alive(iIndex))
 	{
+		if(IsNotSetBit(gp_iBit[BIT_ALIVE], iIndex))
+		{
+			SetBit(gp_iBit[BIT_ALIVE], iIndex);
+		}
+
 		if(IsSetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex))
 		{
 			ShowMenu_Equipment(iIndex);
@@ -822,20 +991,39 @@ public HC_CBasePlayer_Spawn_Post(const iIndex)	{
 	}
 }
 
+public HC_CSGameRules_GiveC4_Pre()	{
+	return HC_SUPERCEDE;
+}
+
 public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
+	if(IsNotSetBit(gp_iBit[BIT_ALIVE], iVictim))
+	{
+		return HC_CONTINUE;
+	}
+	
+	ClearBit(gp_iBit[BIT_ALIVE], iVictim);
+	
 	if(IsSetBit(gp_iBit[BIT_INFECT], iVictim))
 	{
 		remove_task(TASK_ID_PLAYER_HUD + iVictim);
 	}
+	else
+	{
+		g_iAliveHumans--;
+	}
+	
+	return HC_CONTINUE;
 }
 
 public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDamage)	{
 	if(!(g_bInfectionBegan))
 	{
-		return HC_CONTINUE;
+		SetHookChainReturn(ATYPE_INTEGER, 0);
+		
+		return HC_SUPERCEDE;
 	}
 	
-	if(IsSetBit(gp_iBit[BIT_INFECT], iAttacker))
+	if(IsSetBit(gp_iBit[BIT_INFECT], iAttacker) && IsNotSetBit(gp_iBit[BIT_INFECT], iVictim))
 	{
 		if(g_bRoundEnd)
 		{
@@ -843,10 +1031,34 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 			
 			return HC_SUPERCEDE;
 		}
-		
-		fDamage *= g_infoZombieClass[gp_iClass[iAttacker]][CLASS_FACTOR_DMG];
 
-		SetHookChainArg(3, ATYPE_FLOAT, fDamage);
+		static Float: fArmor; fArmor = get_entvar(iVictim, var_armorvalue);
+		
+		if(fArmor > 0.0)
+		{
+			fDamage *= g_infoZombieClass[gp_iClass[iAttacker]][CLASS_FACTOR_DMG];
+			
+			fArmor -= fDamage;
+			
+			set_entvar(iVictim, var_armorvalue, fArmor);
+		}
+		else
+		{
+			if(g_iAliveHumans == 1)
+			{
+				SetHookChainArg(3, ATYPE_FLOAT, fDamage);
+				
+				return HC_CONTINUE;
+			}
+			else
+			{
+				setPlayerInfect(iVictim);
+			
+				set_entvar(iAttacker, var_frags, get_entvar(iAttacker, var_frags) + 1);
+			}
+		}
+		
+		SetHookChainArg(3, ATYPE_FLOAT, 0.0);
 	}
 	
 	return HC_CONTINUE;
@@ -866,8 +1078,8 @@ FakeMeta_EnvFog()	{
 	
 	if(iEnt)
 	{
-		UTIL_SetKvd(iEnt, "env_fog", "density", FOG_DENSITY);
-		UTIL_SetKvd(iEnt, "env_fog", "rendercolor", FOG_COLOR);
+		UTIL_SetKvd(iEnt, "env_fog", "density", g_szFogDensity);
+		UTIL_SetKvd(iEnt, "env_fog", "rendercolor", g_szFogColor);
 	}
 }
 
@@ -909,9 +1121,7 @@ public FakeMetaHook_Spawn_Post(const iEnt)	{
 	
 	if(TrieKeyExists(g_tRemoveEntities, szClassName))
 	{
-		set_entvar(iEnt, var_flags, get_entvar(iEnt, var_flags) | FL_KILLME);
-		
-		return FMRES_SUPERCEDE;
+		set_entvar(iEnt, var_solid, SOLID_NOT);
 	}
 	
 	return FMRES_IGNORED;
@@ -976,7 +1186,7 @@ public FMHook_EmitSound_Pre(const iIndex, const iChannel, const szSample[], cons
 =================================================================================*/
 Hamsandwich_Init()	{
 	RegisterHam(Ham_Item_Deploy, "weapon_knife", "HamHook_Knife_Deploy_Post", true);
-	RegisterHam(g_iHamFwd_Player_Speed, "player", "HamHook_Player_MaxSpeed_Post", true);
+	RegisterHam(Ham_Item_PreFrame, "player", "HamHook_Item_PreFrame_Post", true);
 	
 	new const szEntityClass[][] =
 	{
@@ -1037,7 +1247,7 @@ public HamHook_Knife_Deploy_Post(const iEntity)	{
 	return HAM_IGNORED;
 }
 
-public HamHook_Player_MaxSpeed_Post(iIndex)	{
+public HamHook_Item_PreFrame_Post(const iIndex)	{
 	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
 		if(g_infoZombieClass[gp_iClass[iIndex]][CLASS_SPEED])
@@ -1067,6 +1277,9 @@ ClCmd_Init()	{
 	
 	register_clcmd("say /equip", "ClCmd_Equipment");
 	
+	register_clcmd("radio1", "ClCmd_Block");
+	register_clcmd("radio2", "ClCmd_Block");
+	register_clcmd("radio3", "ClCmd_Block");
 	register_clcmd("jointeam", "ClCmd_Block");
 	register_clcmd("joinclass", "ClCmd_Block");
 }
@@ -1219,7 +1432,7 @@ public Handler_ChooseClass(const iIndex, const iKey)	{
 		{
 			new iClass = gp_iMenuPosition[iIndex] * 8 + iKey + 1;
 			
-			if(is_user_alive(iIndex) && IsNotSetBit(gp_iBit[BIT_INFECT], iIndex))
+			if(IsSetBit(gp_iBit[BIT_ALIVE], iIndex) && IsNotSetBit(gp_iBit[BIT_INFECT], iIndex))
 			{
 				gp_iClass[iIndex] = iClass;
 			}
@@ -1281,7 +1494,7 @@ ShowMenu_Equipment(const iIndex)	{
 }
 
 public Handler_Equipment(const iIndex, const iKey)	{
-	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+	if(IsNotSetBit(gp_iBit[BIT_ALIVE], iIndex) || IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
 		return PLUGIN_HANDLED;
 	}
@@ -1364,7 +1577,7 @@ ShowMenu_PrimaryWeapons(const iIndex, const iPos)	{
 }
 
 public Handler_PrimaryWeapons(const iIndex, const iKey)	{
-	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+	if(IsNotSetBit(gp_iBit[BIT_ALIVE], iIndex) || IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
 		return PLUGIN_HANDLED;
 	}
@@ -1381,12 +1594,9 @@ public Handler_PrimaryWeapons(const iIndex, const iKey)	{
 		}
 		default:
 		{
-			if(is_user_alive(iIndex))
-			{
-				new iWeaponId = gp_iMenuPosition[iIndex] * 8 + iKey + 1;
-				
-				givePlayerPrimaryWeapon(iIndex, iWeaponId);
-			}
+			new iWeaponId = gp_iMenuPosition[iIndex] * 8 + iKey + 1;
+			
+			givePlayerPrimaryWeapon(iIndex, iWeaponId);
 
 			return ShowMenu_SecondaryWeapons(iIndex, gp_iMenuPosition[iIndex] = 0);
 		}
@@ -1449,7 +1659,7 @@ ShowMenu_SecondaryWeapons(const iIndex, const iPos)	{
 }
 
 public Handler_SecondaryWeapons(const iIndex, const iKey)	{
-	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+	if(IsNotSetBit(gp_iBit[BIT_ALIVE], iIndex) || IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
 		return PLUGIN_HANDLED;
 	}
@@ -1466,13 +1676,10 @@ public Handler_SecondaryWeapons(const iIndex, const iKey)	{
 		}
 		default:
 		{
-			if(is_user_alive(iIndex))
-			{
-				new iWeaponId = gp_iMenuPosition[iIndex] * 8 + iKey + 1;
-				
-				givePlayerSecondaryWeapon(iIndex, iWeaponId);
-				givePlayerGrenades(iIndex);
-			}
+			new iWeaponId = gp_iMenuPosition[iIndex] * 8 + iKey + 1;
+			
+			givePlayerSecondaryWeapon(iIndex, iWeaponId);
+			givePlayerGrenades(iIndex);
 		}
 	}
 	
@@ -1494,7 +1701,7 @@ public taskInfect()	{
 
 	for(iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
 	{
-		if(is_user_alive(iIndex))
+		if(IsSetBit(gp_iBit[BIT_ALIVE], iIndex))
 		{
 			iPlayers[iPlayersNum++] = iIndex;
 		}
@@ -1502,7 +1709,7 @@ public taskInfect()	{
 	
 	if(iPlayersNum)
 	{
-		new iTotalInfected = clamp(floatround(iPlayersNum * g_iCvar_ZombieRatio / 10.0), 1, 31);
+		new iTotalInfected = clamp(floatround(iPlayersNum * g_fCvar_ZombieRatio), 1, 31);
 
 		while(iTotalInfected--)
 		{
@@ -1517,8 +1724,10 @@ public taskInfect()	{
 	
 	for(iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
 	{
-		if(is_user_alive(iIndex) && IsNotSetBit(gp_iBit[BIT_INFECT], iIndex))
+		if(IsSetBit(gp_iBit[BIT_ALIVE], iIndex) && IsNotSetBit(gp_iBit[BIT_INFECT], iIndex))
 		{
+			g_iAliveHumans++;
+			
 			rg_set_user_team(iIndex, TEAM_CT);
 		}
 	}
@@ -1540,8 +1749,29 @@ stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[]
 stock setPlayerInfect(const iIndex)	{
 	SetBit(gp_iBit[BIT_INFECT], iIndex);
 
-	rg_set_user_team(iIndex, TEAM_TERRORIST);
+	static szSound[64];
+	ArrayGetString(g_aSoundsZombieScream, random(g_iSizeSoundsZombieScream), szSound, charsmax(szSound));
+
+	emit_sound(iIndex, CHAN_AUTO, szSound, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
 	
+	message_begin(MSG_ONE, MsgId_HideWeapon, {0, 0, 0}, iIndex);
+	{
+		write_byte(1 << 3);
+	}
+	message_end();
+	
+	message_begin(MSG_ONE, MsgId_ScreenFade, {0, 0, 0}, iIndex);
+	{
+		write_short(1 << 12);
+		write_short(1 << 12);
+		write_short(0);
+		write_byte(0);
+		write_byte(255);
+		write_byte(0);
+		write_byte(110);
+	}
+	message_end();
+
 	new iClass = gp_iClass[iIndex];
 	
 	if(g_infoZombieClass[iClass][CLASS_PLAYER_MODEL])
@@ -1559,26 +1789,20 @@ stock setPlayerInfect(const iIndex)	{
 		set_entvar(iIndex, var_gravity, g_infoZombieClass[iClass][CLASS_GRAVITY]);
 	}
 	
-	removePlayerAllWeapons(iIndex);
+	rg_set_user_team(iIndex, TEAM_TERRORIST);
 	
-	ExecuteHamB(g_iHamFwd_Player_Speed, iIndex);
+	ExecuteHamB(Ham_Item_PreFrame, iIndex);
 
-	message_begin(MSG_ONE, MsgId_ScreenFade, {0, 0, 0}, iIndex);
+ 	removePlayerSlotWeapon(iIndex, PRIMARY_WEAPON_SLOT);
+	removePlayerSlotWeapon(iIndex, PISTOL_SLOT);
+	removePlayerSlotWeapon(iIndex, GRENADE_SLOT);
+
+	new iItem = get_member(iIndex, m_pActiveItem);
+	
+	if(iItem > 0)
 	{
-		write_short(1 << 12);
-		write_short(1 << 12);
-		write_short(0);
-		write_byte(0);
-		write_byte(255);
-		write_byte(0);
-		write_byte(110);
+		ExecuteHamB(Ham_Item_Deploy, iItem);
 	}
-	message_end();
-
-	static szSound[64];
-	ArrayGetString(g_aSoundsZombieScream, random(g_iSizeSoundsZombieScream), szSound, charsmax(szSound));
-
-	emit_sound(0, CHAN_AUTO, szSound, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
 	
 	set_task(1.0, "taskPlayerHud", TASK_ID_PLAYER_HUD + iIndex, .flags = "b");
 }
@@ -1592,7 +1816,7 @@ public taskPlayerHud(iIndex)	{
 	{
 		case 0:	/* [HUD] */
 		{
-			set_hudmessage(g_iCvar_HudColor[COLOR_RED], g_iCvar_HudColor[COLOR_GREEN], g_iCvar_HudColor[COLOR_BLUE], g_fCvar_HudPosition[POS_X], g_fCvar_HudPosition[POS_Y], 0, 0.0, 0.9, 0.1, 0.1, -1);
+			set_hudmessage(g_iCvar_HudColor[COLOR_RED], g_iCvar_HudColor[COLOR_GREEN], g_iCvar_HudColor[COLOR_BLUE], g_fCvar_HudPosition[POS_X], g_fCvar_HudPosition[POS_Y], 0, 0.0, 0.9, 0.15, 0.15, -1);
 			ShowSyncHudMsg(iIndex, g_iSyncPlayerHud, "Жизни [%.f] Класс ^"%s^"", fHealth, g_infoZombieClass[gp_iClass[iIndex]]);
 		}
 		case 1:	/* [DHUD] */
@@ -1601,6 +1825,14 @@ public taskPlayerHud(iIndex)	{
 			show_dhudmessage(iIndex, "Жизни [%.f] Класс ^"%s^"", fHealth, g_infoZombieClass[gp_iClass[iIndex]]);
 		}
 	}
+}
+
+stock setPlayerWeather(const iIndex, const iWeather)	{
+	message_begin(MSG_ONE_UNRELIABLE, MsgId_ReceiveW, {0, 0, 0}, iIndex);
+	{
+		write_byte(iWeather);
+	}
+	message_end();
 }
 
 stock givePlayerPrimaryWeapon(const iIndex, const iPrimaryWeaponId)	{
@@ -1636,6 +1868,20 @@ stock removePlayerAllWeapons(const iIndex, const bool: bKnife = true)	{
 	if(bKnife) rg_give_item(iIndex, "weapon_knife");
 }
 
+stock removePlayerSlotWeapon(const iIndex, const InventorySlotType: iSlot)	{
+    new iItem = get_member(iIndex, m_rgpPlayerItems, iSlot);
+	
+    while (iItem > 0)
+    {
+        new szWeaponName[20];
+        get_entvar(iItem, var_classname, szWeaponName, charsmax(szWeaponName));
+        
+        rg_remove_item(iIndex, szWeaponName);
+
+        iItem = get_member(iItem, m_pNext);
+    }
+}
+
 /*================================================================================
  [UTIL]
 =================================================================================*/
@@ -1648,14 +1894,14 @@ stock UTIL_SetKvd(const iEnt, const szClssName[], const szKeyName[], const szVal
 	return dllfunc(DLLFunc_KeyValue, iEnt, 0);
 }
 
-stock UTIL_SetFileState(const zsPlugin[], const zsMessage[], any:...)	{
+stock UTIL_SetFileState(const szPlugin[], const szMessage[], any:...)	{
 	new szLog[256];
-	vformat(szLog, charsmax(szLog), zsMessage, 3);
+	vformat(szLog, charsmax(szLog), szMessage, 3);
 	
 	new szDate[20];
 	get_time("error_%Y%m%d.log", szDate, charsmax(szDate));
 	
-	log_to_file(szDate, "[%s] %s", zsPlugin, szLog);
+	log_to_file(szDate, "[%s] %s", szPlugin, szLog);
 }
 
 stock UTIL_ParseHEXColor(const szValue[])	{
