@@ -10,7 +10,7 @@
 #pragma semicolon				1
 
 #define PLUGIN_NAME				"[ZMB] Core"
-#define PLUGIN_VERS				"0.0.4"
+#define PLUGIN_VERS				"0.0.5"
 #define PLUGIN_AUTH				"81x08"
 
 #define SetBit(%0,%1)			((%0) |= (1 << (%1 - 1)))
@@ -67,9 +67,10 @@ enum playerEquipment	{
 
 enum listWeaponInfo	{
 	WEAPON_NAME[12],
-	WEAPON_CLASSNAME[16],
+	WEAPON_CLASSNAME[20],
 	WeaponIdType: WEAPON_ID,
-	WEAPON_BPAMMO
+	WEAPON_BPAMMO,
+	Float: WEAPON_KNOCK_BACK
 };
 
 enum _: bitsPlayer	{
@@ -86,17 +87,17 @@ enum _: bitsPlayer	{
 new const g_listPrimaryWeaponszMenu[][listWeaponInfo] =	{
 	{},
 	
-	{"M4A1", "weapon_m4a1", WEAPON_M4A1, 90},
-	{"AK47", "weapon_ak47", WEAPON_AK47, 90},
-	{"AWP", "weapon_awp", WEAPON_AWP, 30}
+	{"M4A1", "weapon_m4a1", WEAPON_M4A1, 90, 12.0},
+	{"AK47", "weapon_ak47", WEAPON_AK47, 90, 12.0},
+	{"AWP", "weapon_awp", WEAPON_AWP, 30, 20.0}
 };
 
 new const g_listSecondaryWeaponszMenu[][listWeaponInfo] =	{
 	{},
 	
-	{"USP", "weapon_usp", WEAPON_USP, 120},
-	{"Deagle", "weapon_deagle", WEAPON_DEAGLE, 30},
-	{"Glock 18", "weapon_glock18", WEAPON_GLOCK18, 120}
+	{"USP", "weapon_usp", WEAPON_USP, 120, 12.0},
+	{"Deagle", "weapon_deagle", WEAPON_DEAGLE, 30, 15.0},
+	{"Glock 18", "weapon_glock18", WEAPON_GLOCK18, 120, 12.0}
 };
 
 new const g_listGrenades[] =	{
@@ -145,7 +146,7 @@ new g_iSizeSoundsZombieDie,
 new g_iPrimaryWeapons,
 	g_iSecondaryWeapons;
 
-new g_infoZombieClass[MAX_CLASSES][infoClass];
+new g_infoZombieClass[MAX_CLASSES + 1][infoClass];
 
 new bool: g_bRoundEnd,
 	bool: g_bInfectionBegan;
@@ -160,7 +161,9 @@ new gp_iMenuPosition[MAX_PLAYERS + 1];
 new gp_szSteamId[MAX_PLAYERS + 1][35];
 
 new	Trie: g_tEquipment,
-	Trie: g_tRemoveEntities;
+	Trie: g_tRemoveEntities,
+	Trie: g_tPrimaryWeapons,
+	Trie: g_tSecondaryWeapons;
 
 new Array: g_aSoundsSurvirvorWin;
 
@@ -200,6 +203,22 @@ public plugin_init()	{
 	
 	g_iPrimaryWeapons = sizeof(g_listPrimaryWeaponszMenu);
 	g_iSecondaryWeapons = sizeof(g_listSecondaryWeaponszMenu);
+
+	new iCount;
+	
+	g_tPrimaryWeapons = TrieCreate();
+	
+	for(iCount = 1; iCount < g_iPrimaryWeapons; iCount++)
+	{
+		TrieSetCell(g_tPrimaryWeapons, g_listPrimaryWeaponszMenu[iCount][WEAPON_CLASSNAME], iCount);
+	}
+	
+	g_tSecondaryWeapons = TrieCreate();
+	
+	for(iCount = 1; iCount < g_iSecondaryWeapons; iCount++)
+	{
+		TrieSetCell(g_tSecondaryWeapons, g_listSecondaryWeaponszMenu[iCount][WEAPON_CLASSNAME], iCount);
+	}
 }
 
 public plugin_cfg()	{
@@ -242,7 +261,9 @@ ReadFile_Main(const szFileDir[])	{
 			trim(szBuffer);
 
 			if(!(szBuffer[0]) || szBuffer[0] == ';' || szBuffer[0] == '#')
+			{
 				continue;
+			}
 			
 			iStrLen = strlen(szBuffer);
 			
@@ -348,7 +369,9 @@ ReadFile_Sounds(const szFileDir[])	{
 			trim(szBuffer);
 
 			if(!(szBuffer[0]) || szBuffer[0] == ';' || szBuffer[0] == '#')
+			{
 				continue;
+			}
 			
 			iStrLen = strlen(szBuffer);
 			
@@ -499,7 +522,9 @@ LoadClasses()	{
 	{
 		case 0:
 		{
-			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szFileDir);
+			writeDefaultClassFile(szFileDir);
+			
+			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" был не найден и был создан.", szFileDir);
 		}
 		case 1:
 		{
@@ -524,7 +549,9 @@ ReadFile_Classes(const szFileDir[])	{
 			trim(szBuffer);
 
 			if(!(szBuffer[0]) || szBuffer[0] == ';' || szBuffer[0] == '#')
+			{
 				continue;
+			}
 			
 			iStrLen = strlen(szBuffer);
 
@@ -641,6 +668,26 @@ ReadFile_Classes(const szFileDir[])	{
 		}
 
 		fclose(iFile);
+		
+		if(g_iZombieClasses == 0)
+		{
+			precache_model("models/zmb/classes/v_knife.mdl");
+			precache_model("models/player/slum/slum.mdl");
+
+			addZombieClass(
+				.szName = "Slum",
+				.szKnifeModel = "models/zmb/classes/v_knife.mdl",
+				.szPlayerModel = "slum",
+				.fSpeed = 225.0,
+				.fHealth = 2200.0,
+				.fGravity = 0.7,
+				.fFactorDmg = 1.2
+			);
+			
+			writeDefaultClassFile(szFileDir);
+			
+			UTIL_SetFileState("Core", "~ [INFO] Файл классов ^"%s^" пуст. Поэтому был создан класс ^"Slum^".", szFileDir);
+		}
 	}
 }
 
@@ -680,6 +727,8 @@ Cvars_Cfg()	{
 		case 1:
 		{
 			server_cmd("exec %s", szFileDir);
+			
+			server_exec();
 		}
 	}
 
@@ -757,7 +806,10 @@ public client_disconnect(iIndex)	{
 	}
 	else
 	{
-		g_iAliveHumans--;
+		if(IsSetBit(gp_iBit[BIT_ALIVE], iIndex))
+		{
+			g_iAliveHumans--;
+		}
 	}
 	
 	for(new iCount = BIT_NONE; iCount < BIT_MAX; iCount++)
@@ -843,8 +895,7 @@ public EventHook_HLTV()	{
 			if(g_iWeather)
 			{
 				g_iActiveWeather = g_iWeather;
-				
-				/* [RANDOM] */
+
 				if(g_iActiveWeather == 3)
 				{
 					g_iActiveWeather = random_num(1, 2);
@@ -885,27 +936,34 @@ Message_Init()	{
 }
 
 public MessageHook_TextMsg()	{
-	new szArg[14];
+	new szArg[16];
 	get_msg_arg_string(2, szArg, charsmax(szArg));
 
 	switch(szArg[1])
 	{
+		case 'C':
+		{
+			if(equal(szArg[1], "CTs_Win", 7))
+			{
+				set_msg_arg_string(2, "Люди победили заразу!");
+			}
+		}
+		case 'R':
+		{
+			if(equal(szArg[1], "Round_Draw", 10))
+			{
+				set_msg_arg_string(2, "На этот раз ничья...");
+			}
+		}
 		case 'T':
 		{
 			if(equal(szArg[1], "Target_Saved", 12))
 			{
 				set_msg_arg_string(2, "На этот раз ничья...");
 			}
-			else if(equal(szArg[1], "Terrorist_Win", 13))
+			else if(equal(szArg[1], "Terrorists_Win", 14))
 			{
 				set_msg_arg_string(2, "Зомби захватили весь мир!");
-			}
-		}
-		case 'C':
-		{
-			if(equal(szArg[1], "CTs_Win", 7))
-			{
-				set_msg_arg_string(2, "Люди победили заразу!");
 			}
 		}
 	}
@@ -1015,7 +1073,7 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 	return HC_CONTINUE;
 }
 
-public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDamage)	{
+public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDamage, Float: fDirection[3])	{
 	if(!(g_bInfectionBegan))
 	{
 		SetHookChainReturn(ATYPE_INTEGER, 0);
@@ -1032,7 +1090,9 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 			return HC_SUPERCEDE;
 		}
 
-		static Float: fArmor; fArmor = get_entvar(iVictim, var_armorvalue);
+		static Float: fArmor;
+		
+		fArmor = get_entvar(iVictim, var_armorvalue);
 		
 		if(fArmor > 0.0)
 		{
@@ -1052,6 +1112,8 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 			}
 			else
 			{
+				g_iAliveHumans--;
+
 				setPlayerInfect(iVictim);
 			
 				set_entvar(iAttacker, var_frags, get_entvar(iAttacker, var_frags) + 1);
@@ -1059,6 +1121,46 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 		}
 		
 		SetHookChainArg(3, ATYPE_FLOAT, 0.0);
+		
+		return HC_CONTINUE;
+	}
+	
+	if(IsNotSetBit(gp_iBit[BIT_INFECT], iAttacker) && IsSetBit(gp_iBit[BIT_INFECT], iVictim))
+	{
+		static Float: fOriginHuman[3], Float: fOriginZombie[3];
+		
+		get_entvar(iVictim, var_origin, fOriginZombie);
+		get_entvar(iAttacker, var_origin, fOriginHuman);
+		
+		if(get_distance_f(fOriginHuman, fOriginZombie) > 500.0)
+		{
+			return HC_CONTINUE;
+		}
+		
+		static Float: fVelocity[3];
+		get_entvar(iVictim, var_velocity, fVelocity);
+		
+		static iPrimaryWeaponListId, iSecondaryWeaponListId;
+		getPlayerActiveWeaponListId(iAttacker, iPrimaryWeaponListId, iSecondaryWeaponListId);
+
+		static Float: fFactorDirection = 0.0;
+
+		if(iPrimaryWeaponListId && g_listPrimaryWeaponszMenu[iPrimaryWeaponListId][WEAPON_KNOCK_BACK] > 0.0)
+		{
+			fFactorDirection = g_listPrimaryWeaponszMenu[iPrimaryWeaponListId][WEAPON_KNOCK_BACK];
+		}
+		
+		if(iSecondaryWeaponListId && g_listPrimaryWeaponszMenu[iSecondaryWeaponListId][WEAPON_KNOCK_BACK] > 0.0)
+		{
+			fFactorDirection = g_listPrimaryWeaponszMenu[iSecondaryWeaponListId][WEAPON_KNOCK_BACK];
+		}
+
+		if(fFactorDirection)
+		{
+			UTIL_VecMulScalar(fDirection, fDamage * fFactorDirection, fDirection);
+			
+			set_entvar(iVictim, var_velocity, fDirection);
+		}
 	}
 	
 	return HC_CONTINUE;
@@ -1071,6 +1173,8 @@ FakeMeta_Init()	{
 	unregister_forward(FM_Spawn, g_iFakeMetaFwd_Spawn, true);
 	
 	register_forward(FM_EmitSound, "FMHook_EmitSound_Pre", false);
+	
+	TrieDestroy(g_tRemoveEntities);
 }
 
 FakeMeta_EnvFog()	{
@@ -1233,11 +1337,11 @@ public HamHook_Knife_Deploy_Post(const iEntity)	{
 	{
 		if(g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])
 		{
-			static sViewModel;
+			static szViewModel;
 			
-			if(sViewModel || (sViewModel = engfunc(EngFunc_AllocString, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])))
+			if(szViewModel || (szViewModel = engfunc(EngFunc_AllocString, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])))
 			{
-				set_pev_string(iIndex, pev_viewmodel2, sViewModel);
+				set_pev_string(iIndex, pev_viewmodel2, szViewModel);
 			}
 			
 			set_pev(iIndex, pev_weaponmodel2, "");
@@ -1274,20 +1378,20 @@ public HamHook_EntityBlock_Pre(const iEntity, const iIndex)	{
 =================================================================================*/
 ClCmd_Init()	{
 	register_clcmd("drop", "ClCmd_Drop");
-	
-	register_clcmd("say /equip", "ClCmd_Equipment");
-	
+
 	register_clcmd("radio1", "ClCmd_Block");
 	register_clcmd("radio2", "ClCmd_Block");
 	register_clcmd("radio3", "ClCmd_Block");
 	register_clcmd("jointeam", "ClCmd_Block");
 	register_clcmd("joinclass", "ClCmd_Block");
+	
+	register_clcmd("say /equip", "ClCmd_Equipment");
 }
 
 public ClCmd_Drop(const iIndex)	{
 	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
-		if(get_user_weapon(iIndex) == CSW_KNIFE)
+		if(WeaponIdType: get_user_weapon(iIndex) == WEAPON_KNIFE)
 		{
 			return PLUGIN_HANDLED;
 		}
@@ -1296,13 +1400,13 @@ public ClCmd_Drop(const iIndex)	{
 	return PLUGIN_CONTINUE;
 }
 
-public ClCmd_Equipment(const iIndex)	{
-	SetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
-	
+public ClCmd_Block()	{
 	return PLUGIN_HANDLED;
 }
 
-public ClCmd_Block()	{
+public ClCmd_Equipment(const iIndex)	{
+	SetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
+	
 	return PLUGIN_HANDLED;
 }
 
@@ -1340,7 +1444,7 @@ public Handler_Main(const iIndex, const iKey)	{
 		case 2:
 		{
 			InvertBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
-			
+
 			return ShowMenu_Main(iIndex);
 		}
 	}
@@ -1407,6 +1511,7 @@ ShowMenu_ChooseClass(const iIndex, const iPos)	{
 	if(iEnd < g_iZombieClasses)
 	{
 		iBitKeys |= MENU_KEY_9;
+		
 		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r[9] \wДалее^n\r[0] \w%s", iPos ? "Назад" : "Выход");
 	}
 	else
@@ -1475,7 +1580,8 @@ ShowMenu_Equipment(const iIndex)	{
 	else
 	{
 		iBitKeys |= MENU_KEY_2;
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \wПредыдущие снаряжие \r[ \d%s | %s \r]^n^n", g_listPrimaryWeaponszMenu[iPrimaryWeaponId], g_listSecondaryWeaponszMenu[iSecondaryWeaponId]);
+		
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \wПредыдущие снаряжие \r[ \d%s | %s \r]^n^n", g_listPrimaryWeaponszMenu[iPrimaryWeaponId][WEAPON_NAME], g_listSecondaryWeaponszMenu[iSecondaryWeaponId][WEAPON_NAME]);
 	}
 	
 	if(!(iPrimaryWeaponId) || !(iSecondaryWeaponId))
@@ -1485,6 +1591,7 @@ ShowMenu_Equipment(const iIndex)	{
 	else
 	{
 		iBitKeys |= MENU_KEY_3;
+		
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[3] \wБольше не показывать меню^n^n^n^n^n^n^n");
 	}
 	
@@ -1512,10 +1619,12 @@ public Handler_Equipment(const iIndex, const iKey)	{
 			
 			givePlayerPrimaryWeapon(iIndex, iPrimaryWeaponId);
 			givePlayerSecondaryWeapon(iIndex, iSecondaryWeaponId);
-			
 			givePlayerGrenades(iIndex);
 
-			if(iKey == 2) ClearBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
+			if(iKey == 2)
+			{
+				ClearBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
+			}
 		}
 	}
 	
@@ -1555,6 +1664,7 @@ ShowMenu_PrimaryWeapons(const iIndex, const iPos)	{
 	for(iCount = iStart + 1; iCount < iEnd; iCount++)
 	{
 		iBitKeys |= (1 << iItem);
+		
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_listPrimaryWeaponszMenu[iCount][WEAPON_NAME]);
 	}
 	
@@ -1566,6 +1676,7 @@ ShowMenu_PrimaryWeapons(const iIndex, const iPos)	{
 	if(iEnd < g_iPrimaryWeapons)
 	{
 		iBitKeys |= MENU_KEY_9;
+		
 		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r[9] \wДалее^n\r[0] \w%s", iPos ? "Назад" : "Выход");
 	}
 	else
@@ -1637,6 +1748,7 @@ ShowMenu_SecondaryWeapons(const iIndex, const iPos)	{
 	for(iCount = iStart + 1; iCount < iEnd; iCount++)
 	{
 		iBitKeys |= (1 << iItem);
+		
 		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_listSecondaryWeaponszMenu[iCount][WEAPON_NAME]);
 	}
 	
@@ -1648,6 +1760,7 @@ ShowMenu_SecondaryWeapons(const iIndex, const iPos)	{
 	if(iEnd < g_iSecondaryWeapons)
 	{
 		iBitKeys |= MENU_KEY_9;
+		
 		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r[9] \wДалее^n\r[0] \w%s", iPos ? "Назад" : "Выход");
 	}
 	else
@@ -1835,6 +1948,25 @@ stock setPlayerWeather(const iIndex, const iWeather)	{
 	message_end();
 }
 
+stock getPlayerActiveWeaponListId(const iIndex, &iPrimaryWeaponListId, &iSecondaryWeaponListId)	{
+ 	new iItem = get_member(iIndex, m_pActiveItem), szWeaponName[20];
+	
+ 	if(iItem > 0)
+ 	{
+        get_entvar(iItem, var_classname, szWeaponName, charsmax(szWeaponName));
+
+        if(!(TrieGetCell(g_tPrimaryWeapons, szWeaponName, iPrimaryWeaponListId)))
+		{
+			iPrimaryWeaponListId = 0;
+		}
+		
+        if(!(TrieGetCell(g_tSecondaryWeapons, szWeaponName, iSecondaryWeaponListId)))
+		{
+			iSecondaryWeaponListId = 0;
+		}
+ 	}
+}
+
 stock givePlayerPrimaryWeapon(const iIndex, const iPrimaryWeaponId)	{
 	if(iPrimaryWeaponId)
 	{
@@ -1865,21 +1997,39 @@ stock givePlayerGrenades(const iIndex)	{
 stock removePlayerAllWeapons(const iIndex, const bool: bKnife = true)	{
 	rg_remove_all_items(iIndex);
 	
-	if(bKnife) rg_give_item(iIndex, "weapon_knife");
+	if(bKnife)
+	{
+		rg_give_item(iIndex, "weapon_knife");
+	}
 }
 
 stock removePlayerSlotWeapon(const iIndex, const InventorySlotType: iSlot)	{
-    new iItem = get_member(iIndex, m_rgpPlayerItems, iSlot);
-	
-    while (iItem > 0)
+    new iItem = get_member(iIndex, m_rgpPlayerItems, iSlot), szWeaponName[20];
+
+    while(iItem > 0)
     {
-        new szWeaponName[20];
         get_entvar(iItem, var_classname, szWeaponName, charsmax(szWeaponName));
-        
+
         rg_remove_item(iIndex, szWeaponName);
 
         iItem = get_member(iItem, m_pNext);
     }
+}
+
+stock writeDefaultClassFile(const szFileDir[])	{
+	write_file(
+		szFileDir,
+		"\
+			[Slum]^n\
+			^tknife_model = ^"models/zmb/classes/v_knife.mdl^"^n\
+			^tplayer_model = ^"slum^"^n^n\
+			^tspeed = ^"225^"^n\
+			^thealth = ^"2200^"^n\
+			^tgravity = ^"0.7^"^n\
+			^tfactor_damage = ^"1.2^"^n\
+			[end]\
+		"
+	);
 }
 
 /*================================================================================
@@ -1924,6 +2074,7 @@ stock UTIL_Parse16bit(const cSymbol1, const cSymbol2)	{
 }
 
 stock UTIL_ParseHex(const cSymbol)	{
+	
 	switch(cSymbol)
 	{
 		case '0'..'9':
@@ -1941,4 +2092,10 @@ stock UTIL_ParseHex(const cSymbol)	{
 	}
 
 	return 0;
+}
+
+stock UTIL_VecMulScalar(const Float: fVector[], const Float: fScalar, Float: fOut[])	{
+	fOut[0] = fVector[0] * fScalar;
+	fOut[1] = fVector[1] * fScalar;
+	fOut[2] = fVector[2] * fScalar;
 }
