@@ -1,4 +1,5 @@
 #include <amxmodx>
+#include <engine>
 #include <fakemeta>
 #include <hamsandwich>
 #include <reapi>
@@ -10,7 +11,7 @@
 #pragma semicolon				1
 
 #define PLUGIN_NAME				"[ZMB] Core"
-#define PLUGIN_VERS				"0.0.5"
+#define PLUGIN_VERS				"0.0.6"
 #define PLUGIN_AUTH				"81x08"
 
 #define SetBit(%0,%1)			((%0) |= (1 << (%1 - 1)))
@@ -25,6 +26,9 @@
 #define MAX_CLASSES				10
 
 #define CLASS_NONE				0
+
+#define HIDEHUD_FLASHLIGHT		(1 << 1)
+#define HIDEHUD_HEALTH			(1 << 3)
 
 const MsgId_TextMsg				= 77;
 const MsgId_ReceiveW			= 129;
@@ -77,6 +81,7 @@ enum _: bitsPlayer	{
 	BIT_NONE,
 	
 	BIT_ALIVE,
+	BIT_HUMAN,
 	BIT_INFECT,
 	BIT_CONNECTED,
 	BIT_MENU_EQUIPMENT,
@@ -112,9 +117,12 @@ new g_iFakeMetaFwd_Spawn;
 new HamHook: g_iHamFwd_Entity_Block[13];
 
 new g_iCvar_HudType,
+	g_iCvar_ZombieHasNvg,
 	g_iCvar_SaveEquipment,
 	g_iCvar_TimeInfections,
-	g_iCvar_HudColor[Color];
+	g_iCvar_HudColor[Color],
+	g_iCvar_BlockZombieFlashlight,
+	g_iCvar_StateKnockbackSitZombie;
 	
 new Float: g_fCvar_ZombieRatio,
 	Float: g_fCvar_HudPosition[Positon];
@@ -135,13 +143,13 @@ new g_szFogColor[12],
 
 new g_iSyncPlayerHud;
 
-new g_iSizeSoundsSurvirvorWin;
+new g_iNumberSoundsSurvirvorWin;
 
-new g_iSizeSoundsZombieDie,
-	g_iSizeSoundsZombieWin,
-	g_iSizeSoundsZombieScream,
-	g_iSizeSoundsZombieKnifeMiss,
-	g_iSizeSoundsZombieKnifeHits;
+new g_iNumberSoundsZombieDie,
+	g_iNumberSoundsZombieWin,
+	g_iNumberSoundsZombieScream,
+	g_iNumberSoundsZombieKnifeMiss,
+	g_iNumberSoundsZombieKnifeHits;
 
 new g_iPrimaryWeapons,
 	g_iSecondaryWeapons;
@@ -191,6 +199,7 @@ public plugin_init()	{
 	Message_Init();
 	
 	ReAPI_Init();
+	Engine_Init();
 	FakeMeta_Init();
 	Hamsandwich_Init();
 
@@ -448,6 +457,8 @@ ReadFile_Sounds(const szFileDir[])	{
 
 										ArrayPushString(g_aSoundsZombieScream, szBuffer);
 									}
+									
+									continue;
 								}
 								
 								/* [Zombie knife miss] */
@@ -459,6 +470,8 @@ ReadFile_Sounds(const szFileDir[])	{
 
 										ArrayPushString(g_aSoundsZombieKnifeMiss, szBuffer);
 									}
+									
+									continue;
 								}
 								
 								/* [Zombie knife hits] */
@@ -482,32 +495,32 @@ ReadFile_Sounds(const szFileDir[])	{
 		
 		if(g_aSoundsSurvirvorWin)
 		{
-			g_iSizeSoundsSurvirvorWin = ArraySize(g_aSoundsSurvirvorWin);
+			g_iNumberSoundsSurvirvorWin = ArraySize(g_aSoundsSurvirvorWin);
 		}
 		
 		if(g_aSoundsZombieWin)
 		{
-			g_iSizeSoundsZombieWin = ArraySize(g_aSoundsZombieWin);
+			g_iNumberSoundsZombieWin = ArraySize(g_aSoundsZombieWin);
 		}
 
 		if(g_aSoundsZombieDie)
 		{
-			g_iSizeSoundsZombieDie = ArraySize(g_aSoundsZombieDie);
+			g_iNumberSoundsZombieDie = ArraySize(g_aSoundsZombieDie);
 		}
 		
 		if(g_aSoundsZombieScream)
 		{
-			g_iSizeSoundsZombieScream = ArraySize(g_aSoundsZombieScream);
+			g_iNumberSoundsZombieScream = ArraySize(g_aSoundsZombieScream);
 		}
 		
 		if(g_aSoundsZombieKnifeMiss)
 		{
-			g_iSizeSoundsZombieKnifeMiss = ArraySize(g_aSoundsZombieKnifeMiss);
+			g_iNumberSoundsZombieKnifeMiss = ArraySize(g_aSoundsZombieKnifeMiss);
 		}
 		
 		if(g_aSoundsZombieKnifeHits)
 		{
-			g_iSizeSoundsZombieKnifeHits = ArraySize(g_aSoundsZombieKnifeHits);
+			g_iNumberSoundsZombieKnifeHits = ArraySize(g_aSoundsZombieKnifeHits);
 		}
 	}
 }
@@ -700,18 +713,24 @@ Cvars_Cfg()	{
 		iCvarId_HudPosition,
 		iCvarId_ZombieRatio,
 		iCvarId_MapLightStyle,
+		iCvarId_ZombieHasNvg,
 		iCvarId_SaveEquipment,
 		iCvarId_TimeInfections,
-		iCvarId_GameDescription;
+		iCvarId_GameDescription,
+		iCvarId_BlockZombieFlashlight,
+		iCvarId_StateKnockbackSitZombie;
 
-	iCvarId_HudType			= register_cvar("zmb_hud_type", "0");
-	iCvarId_HudColor		= register_cvar("zmb_hud_color", "#008000");
-	iCvarId_HudPosition		= register_cvar("zmb_hud_position", "-1.0 0.85");
-	iCvarId_ZombieRatio		= register_cvar("zmb_zombie_ratio", "0.2");
-	iCvarId_MapLightStyle	= register_cvar("zmb_map_lightstyle", "d");
-	iCvarId_SaveEquipment	= register_cvar("zmb_save_equipment", "0");
-	iCvarId_TimeInfections	= register_cvar("zmb_time_infections", "15");
-	iCvarId_GameDescription	= register_cvar("zmb_game_description", "[ZMB] by 81x08");
+	iCvarId_HudType					= register_cvar("zmb_hud_type",						"0");
+	iCvarId_HudColor				= register_cvar("zmb_hud_color",					"#008000");
+	iCvarId_HudPosition				= register_cvar("zmb_hud_position",					"-1.0 0.85");
+	iCvarId_ZombieRatio				= register_cvar("zmb_zombie_ratio",					"0.2");
+	iCvarId_MapLightStyle			= register_cvar("zmb_map_lightstyle",				"d");
+	iCvarId_ZombieHasNvg			= register_cvar("zmb_zombie_has_nvg",				"1");
+	iCvarId_SaveEquipment			= register_cvar("zmb_save_equipment",				"0");
+	iCvarId_TimeInfections			= register_cvar("zmb_time_infections",				"15");
+	iCvarId_GameDescription			= register_cvar("zmb_game_description",				"[ZMB] by 81x08");
+	iCvarId_BlockZombieFlashlight	= register_cvar("zmb_block_zombie_flashlight",		"1");
+	iCvarId_StateKnockbackSitZombie	= register_cvar("zmb_state_knockback_sit_zombie",	"1");
 
  	new szFileDir[128];
 	get_localinfo("amxx_configsdir", szFileDir, charsmax(szFileDir));
@@ -747,15 +766,24 @@ Cvars_Cfg()	{
 	g_fCvar_HudPosition[POS_Y] 		= str_to_float(szPosition[POS_Y]);
 	
 	g_fCvar_ZombieRatio				= get_pcvar_float(iCvarId_ZombieRatio);
+	g_iCvar_ZombieHasNvg			= get_pcvar_num(iCvarId_ZombieHasNvg);
 	g_iCvar_SaveEquipment			= get_pcvar_num(iCvarId_SaveEquipment);
 	g_iCvar_TimeInfections			= get_pcvar_num(iCvarId_TimeInfections);
 
 	get_pcvar_string(iCvarId_MapLightStyle, g_szCvar_MapLightStyle, charsmax(g_szCvar_MapLightStyle));
 	get_pcvar_string(iCvarId_GameDescription, g_szCvar_GameDescription, charsmax(g_szCvar_GameDescription));
 
+	g_iCvar_BlockZombieFlashlight	= get_pcvar_num(iCvarId_BlockZombieFlashlight);
+	g_iCvar_StateKnockbackSitZombie	= get_pcvar_num(iCvarId_StateKnockbackSitZombie);
+	
 	if(g_iCvar_SaveEquipment)
 	{
 		g_tEquipment = TrieCreate();
+	}
+	
+	if(g_iCvar_BlockZombieFlashlight)
+	{
+		register_impulse(100, "EngineHook_Impulse_Flashlight");
 	}
 	
 	if(g_szCvar_GameDescription[0])
@@ -848,12 +876,7 @@ Event_Init()	{
 public EventHook_InitHUD(const iIndex)	{
 	if(g_szCvar_MapLightStyle[0])
 	{
-		message_begin(MSG_ONE, SVC_LIGHTSTYLE, {0, 0, 0}, iIndex);
-		{
-			write_byte(0);
-			write_string(g_szCvar_MapLightStyle);
-		}
-		message_end();
+		setPlayerMapLightStyle(iIndex);
 	}
 	
 	if(g_iActiveWeather)
@@ -977,20 +1000,26 @@ public MessageHook_SendAudio()	{
 	{
 		case 't':
 		{
-			if(equal(szArg[7], "terwin", 6))
+			if(g_iNumberSoundsZombieWin)
 			{
-				ArrayGetString(g_aSoundsZombieWin, random(g_iSizeSoundsZombieWin), szSoundWin, charsmax(szSoundWin));
-				
-				set_msg_arg_string(2, szSoundWin);
+				if(equal(szArg[7], "terwin", 6))
+				{
+					ArrayGetString(g_aSoundsZombieWin, random(g_iNumberSoundsZombieWin), szSoundWin, charsmax(szSoundWin));
+					
+					set_msg_arg_string(2, szSoundWin);
+				}
 			}
 		}
 		case 'c':
 		{
-			if(equal(szArg[7], "ctwin", 5))
+			if(g_iNumberSoundsSurvirvorWin)
 			{
-				ArrayGetString(g_aSoundsSurvirvorWin, random(g_iSizeSoundsSurvirvorWin), szSoundWin, charsmax(szSoundWin));
-				
-				set_msg_arg_string(2, szSoundWin);
+				if(equal(szArg[7], "ctwin", 5))
+				{
+					ArrayGetString(g_aSoundsSurvirvorWin, random(g_iNumberSoundsSurvirvorWin), szSoundWin, charsmax(szSoundWin));
+					
+					set_msg_arg_string(2, szSoundWin);
+				}
 			}
 		}
 	}
@@ -1026,6 +1055,8 @@ public HC_CBasePlayer_Spawn_Post(const iIndex)	{
 			SetBit(gp_iBit[BIT_ALIVE], iIndex);
 		}
 
+		SetBit(gp_iBit[BIT_HUMAN], iIndex);
+
 		if(IsSetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex))
 		{
 			ShowMenu_Equipment(iIndex);
@@ -1044,7 +1075,7 @@ public HC_CBasePlayer_Spawn_Post(const iIndex)	{
 		{
 			gp_iClass[iIndex] = gp_iSelectedClass[iIndex];
 			
-			gp_iSelectedClass[iIndex] = 0;
+			gp_iSelectedClass[iIndex] = CLASS_NONE;
 		}
 	}
 }
@@ -1068,6 +1099,8 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 	else
 	{
 		g_iAliveHumans--;
+		
+		ClearBit(gp_iBit[BIT_HUMAN], iVictim);
 	}
 	
 	return HC_CONTINUE;
@@ -1127,6 +1160,14 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 	
 	if(IsNotSetBit(gp_iBit[BIT_INFECT], iAttacker) && IsSetBit(gp_iBit[BIT_INFECT], iVictim))
 	{
+		if(g_iCvar_StateKnockbackSitZombie)
+		{
+			if(get_entvar(iVictim, var_flags) & FL_DUCKING)
+			{
+				return HC_CONTINUE;
+			}
+		}
+		
 		static Float: fOriginHuman[3], Float: fOriginZombie[3];
 		
 		get_entvar(iVictim, var_origin, fOriginZombie);
@@ -1167,6 +1208,24 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 }
 
 /*================================================================================
+ [Engine]
+=================================================================================*/
+Engine_Init()	{
+}
+
+public EngineHook_Impulse_Flashlight(const iIndex)	{
+	if(g_iCvar_BlockZombieFlashlight)
+	{
+		if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+		{
+			return PLUGIN_HANDLED;
+		}
+	}
+	
+	return PLUGIN_CONTINUE;
+}
+
+/*================================================================================
  [FakeMeta]
 =================================================================================*/
 FakeMeta_Init()	{
@@ -1204,7 +1263,7 @@ FakeMeta_RemoveEntities()	{
 
 	g_tRemoveEntities = TrieCreate();
 
-	for(new iCount = 0; iCount < sizeof(szRemoveEntities); iCount++)
+	for(new iCount = 0, iSize = sizeof(szRemoveEntities); iCount < iSize; iCount++)
 	{
 		TrieSetCell(g_tRemoveEntities, szRemoveEntities[iCount], iCount);
 	}
@@ -1240,14 +1299,17 @@ public FMHook_EmitSound_Pre(const iIndex, const iChannel, const szSample[], cons
 
 			if(szSample[8] == 'k' && szSample[9] == 'n' && szSample[10] == 'i')
 			{
-				/* [Knife slash] */
-				if(szSample[14] == 's' && szSample[15] == 'l' && szSample[16] == 'a')
+				if(g_iNumberSoundsZombieKnifeMiss)
 				{
-					ArrayGetString(g_aSoundsZombieKnifeMiss, random(g_iSizeSoundsZombieKnifeMiss), szSound, charsmax(szSound));
-			
-					emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
-					
-					return FMRES_SUPERCEDE;
+					/* [Knife slash] */
+					if(szSample[14] == 's' && szSample[15] == 'l' && szSample[16] == 'a')
+					{
+						ArrayGetString(g_aSoundsZombieKnifeMiss, random(g_iNumberSoundsZombieKnifeMiss), szSound, charsmax(szSound));
+				
+						emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+						
+						return FMRES_SUPERCEDE;
+					}
 				}
 				
 				/* [Knife [hit|stab] */
@@ -1256,28 +1318,37 @@ public FMHook_EmitSound_Pre(const iIndex, const iChannel, const szSample[], cons
 					/* [Wall] */
 					if(szSample[17] == 'w' && szSample[18] == 'a' && szSample[19] == 'l')
 					{
-						ArrayGetString(g_aSoundsZombieKnifeMiss, random(g_iSizeSoundsZombieKnifeMiss), szSound, charsmax(szSound));
-			
-						emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+						if(g_iNumberSoundsZombieKnifeMiss)
+						{
+							ArrayGetString(g_aSoundsZombieKnifeMiss, random(g_iNumberSoundsZombieKnifeMiss), szSound, charsmax(szSound));
+				
+							emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+						}
 					}
 					else
 					{
-						ArrayGetString(g_aSoundsZombieKnifeHits, random(g_iSizeSoundsZombieKnifeHits), szSound, charsmax(szSound));
-			
-						emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+						if(g_iNumberSoundsZombieKnifeHits)
+						{
+							ArrayGetString(g_aSoundsZombieKnifeHits, random(g_iNumberSoundsZombieKnifeHits), szSound, charsmax(szSound));
+				
+							emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+						}
 					}
 
 					return FMRES_SUPERCEDE;
 				}
 			}
 			
-			if(szSample[7] == 'd' && szSample[8] == 'i' && szSample[9] == 'e')
+			if(g_iNumberSoundsZombieDie)
 			{
-				ArrayGetString(g_aSoundsZombieDie, random(g_iSizeSoundsZombieDie), szSound, charsmax(szSound));
-			
-				emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+				if(szSample[7] == 'd' && szSample[8] == 'i' && szSample[9] == 'e')
+				{
+					ArrayGetString(g_aSoundsZombieDie, random(g_iNumberSoundsZombieDie), szSound, charsmax(szSound));
 				
-				return FMRES_SUPERCEDE;
+					emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+					
+					return FMRES_SUPERCEDE;
+				}
 			}
 		}
 	}
@@ -1337,14 +1408,8 @@ public HamHook_Knife_Deploy_Post(const iEntity)	{
 	{
 		if(g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])
 		{
-			static szViewModel;
-			
-			if(szViewModel || (szViewModel = engfunc(EngFunc_AllocString, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])))
-			{
-				set_pev_string(iIndex, pev_viewmodel2, szViewModel);
-			}
-			
-			set_pev(iIndex, pev_weaponmodel2, "");
+			entity_set_string(iIndex, EV_SZ_viewmodel, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL]);
+			entity_set_string(iIndex, EV_SZ_weaponmodel, "");
 		}
 	}
 	
@@ -1379,11 +1444,19 @@ public HamHook_EntityBlock_Pre(const iEntity, const iIndex)	{
 ClCmd_Init()	{
 	register_clcmd("drop", "ClCmd_Drop");
 
-	register_clcmd("radio1", "ClCmd_Block");
-	register_clcmd("radio2", "ClCmd_Block");
-	register_clcmd("radio3", "ClCmd_Block");
-	register_clcmd("jointeam", "ClCmd_Block");
-	register_clcmd("joinclass", "ClCmd_Block");
+	new const szCommand[][] =
+	{
+		"radio1",
+		"radio2",
+		"radio3",
+		"jointeam",
+		"joinclass"
+	};
+	
+	for(new iCount = 0, iSize = sizeof(szCommand); iCount < iSize; iCount++)
+	{
+		register_clcmd(szCommand[iCount], "ClCmd_Block");
+	}
 	
 	register_clcmd("say /equip", "ClCmd_Equipment");
 }
@@ -1837,7 +1910,7 @@ public taskInfect()	{
 	
 	for(iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
 	{
-		if(IsSetBit(gp_iBit[BIT_ALIVE], iIndex) && IsNotSetBit(gp_iBit[BIT_INFECT], iIndex))
+		if(IsSetBit(gp_iBit[BIT_HUMAN], iIndex))
 		{
 			g_iAliveHumans++;
 			
@@ -1860,19 +1933,25 @@ stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[]
 }
 
 stock setPlayerInfect(const iIndex)	{
+	ClearBit(gp_iBit[BIT_HUMAN], iIndex);
+	
 	SetBit(gp_iBit[BIT_INFECT], iIndex);
 
-	static szSound[64];
-	ArrayGetString(g_aSoundsZombieScream, random(g_iSizeSoundsZombieScream), szSound, charsmax(szSound));
-
-	emit_sound(iIndex, CHAN_AUTO, szSound, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	if(g_iNumberSoundsZombieScream)
+	{
+		static szSound[64];
+		
+		ArrayGetString(g_aSoundsZombieScream, random(g_iNumberSoundsZombieScream), szSound, charsmax(szSound));
 	
+		emit_sound(iIndex, CHAN_AUTO, szSound, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	}
+
 	message_begin(MSG_ONE, MsgId_HideWeapon, {0, 0, 0}, iIndex);
 	{
-		write_byte(1 << 3);
+		write_byte((g_iCvar_BlockZombieFlashlight ? HIDEHUD_FLASHLIGHT : (1 << 0)) | HIDEHUD_HEALTH);
 	}
 	message_end();
-	
+
 	message_begin(MSG_ONE, MsgId_ScreenFade, {0, 0, 0}, iIndex);
 	{
 		write_short(1 << 12);
@@ -1903,18 +1982,33 @@ stock setPlayerInfect(const iIndex)	{
 	}
 	
 	rg_set_user_team(iIndex, TEAM_TERRORIST);
-	
+
 	ExecuteHamB(Ham_Item_PreFrame, iIndex);
 
  	removePlayerSlotWeapon(iIndex, PRIMARY_WEAPON_SLOT);
 	removePlayerSlotWeapon(iIndex, PISTOL_SLOT);
 	removePlayerSlotWeapon(iIndex, GRENADE_SLOT);
 
-	new iItem = get_member(iIndex, m_pActiveItem);
+ 	new iItem = get_member(iIndex, m_pActiveItem);
 	
 	if(iItem > 0)
 	{
 		ExecuteHamB(Ham_Item_Deploy, iItem);
+	}
+	
+	if(g_iCvar_ZombieHasNvg)
+	{
+		set_member(iIndex, m_bHasNightVision, true);
+	}
+	
+	if(g_iCvar_BlockZombieFlashlight)
+	{
+		new iEffects = get_entvar(iIndex, var_effects);
+		
+		if(iEffects & EF_DIMLIGHT)
+		{
+			set_entvar(iIndex, var_effects, iEffects & ~EF_DIMLIGHT);
+		}
 	}
 	
 	set_task(1.0, "taskPlayerHud", TASK_ID_PLAYER_HUD + iIndex, .flags = "b");
@@ -1944,6 +2038,15 @@ stock setPlayerWeather(const iIndex, const iWeather)	{
 	message_begin(MSG_ONE_UNRELIABLE, MsgId_ReceiveW, {0, 0, 0}, iIndex);
 	{
 		write_byte(iWeather);
+	}
+	message_end();
+}
+
+stock setPlayerMapLightStyle(const iIndex)	{
+	message_begin(MSG_ONE, SVC_LIGHTSTYLE, {0, 0, 0}, iIndex);
+	{
+		write_byte(0);
+		write_string(g_szCvar_MapLightStyle);
 	}
 	message_end();
 }
@@ -1988,7 +2091,7 @@ stock givePlayerSecondaryWeapon(const iIndex, const iSecondaryWeaponId)	{
 }
 
 stock givePlayerGrenades(const iIndex)	{
-	for(new iCount = 0; iCount < sizeof(g_listGrenades); iCount++)
+	for(new iCount = 0, iSize = sizeof(g_listGrenades); iCount < iSize; iCount++)
 	{
 		rg_give_item(iIndex, g_listGrenades[iCount]);
 	}
@@ -2069,26 +2172,24 @@ stock UTIL_ParseHEXColor(const szValue[])	{
 	return iColor;
 }
 
-stock UTIL_Parse16bit(const cSymbol1, const cSymbol2)	{
-	return UTIL_ParseHex(cSymbol1) * 16 + UTIL_ParseHex(cSymbol2);
+stock UTIL_Parse16bit(const cSymbolA, const cSymbolB)	{
+	return UTIL_ParseHex(cSymbolA) * 16 + UTIL_ParseHex(cSymbolB);
 }
 
 stock UTIL_ParseHex(const cSymbol)	{
-	
-	switch(cSymbol)
+	if('0' <= cSymbol && cSymbol <= '9')
 	{
-		case '0'..'9':
-		{
-			return cSymbol - '0';
-		}
-		case 'a'..'f':
-		{
-			return 10 + cSymbol - 'a';
-		}
-		case 'A'..'F':
-		{
-			return 10 + cSymbol - 'A';
-		}
+		return cSymbol - '0';
+	}
+	
+	if('a' <= cSymbol && cSymbol <= 'f')
+	{
+		return 10 + cSymbol - 'a';
+	}
+	
+	if('A' <= cSymbol && cSymbol <= 'F')
+	{
+		return 10 + cSymbol - 'A';
 	}
 
 	return 0;
