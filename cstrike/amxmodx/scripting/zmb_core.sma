@@ -25,6 +25,7 @@
 #define MAX_PLAYERS             32
 #define MAX_CLASSES             10
 
+#define MAX_GRENADES            4
 #define MAX_PRIMARY_WEAPONS     3
 #define MAX_SECONDARY_WEAPONS   3
 
