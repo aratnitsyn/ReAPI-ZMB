@@ -1,5 +1,4 @@
 #include <amxmodx>
-#include <engine>
 #include <fakemeta>
 #include <hamsandwich>
 #include <reapi>
@@ -190,7 +189,6 @@ public plugin_init()	{
 	Message_Init();
 	
 	ReAPI_Init();
-	Engine_Init();
 	FakeMeta_Init();
 	Hamsandwich_Init();
 
@@ -929,9 +927,9 @@ Cvars_Cfg()	{
 	}
 	
 	if(g_iCvar_BlockZombieFlashlight)
-	{
-		register_impulse(100, "EngineHook_Impulse_Flashlight");
-	}
+    	{                                                     
+        	RegisterHookChain(RG_CBasePlayer_ImpulseCommands, "ReapiHook_Impulse_Flashlight", false);
+    	}
 	
 	if(g_szCvar_GameDescription[0])
 	{
@@ -1369,22 +1367,20 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 	return HC_CONTINUE;
 }
 
-/*================================================================================
- [Engine]
-=================================================================================*/
-Engine_Init()	{
-}
-
-public EngineHook_Impulse_Flashlight(const iIndex)	{
-	if(g_iCvar_BlockZombieFlashlight)
-	{
-		if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
-		{
-			return PLUGIN_HANDLED;
-		}
-	}
-	
-	return PLUGIN_CONTINUE;
+public ReapiHook_Impulse_Flashlight(const iIndex)
+{
+    if(g_iCvar_BlockZombieFlashlight)
+    {   
+        if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+        {
+            if(get_entvar(iIndex, var_impulse) == 100)
+            {
+                set_entvar(iIndex, var_impulse, 0);
+                return HC_SUPERCEDE;
+            }
+        }
+    } 
+    return HC_CONTINUE;
 }
 
 /*================================================================================
@@ -1575,8 +1571,8 @@ public HamHook_Knife_Deploy_Post(const iEntity)	{
 	{
 		if(g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])
 		{
-			entity_set_string(iIndex, EV_SZ_viewmodel, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL]);
-			entity_set_string(iIndex, EV_SZ_weaponmodel, "");
+			set_entvar(iIndex, var_viewmodel, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL]);
+			set_entvar(iIndex, var_weaponmodel, "");
 		}
 	}
 	
