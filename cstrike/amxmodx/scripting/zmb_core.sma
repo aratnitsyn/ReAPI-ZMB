@@ -1,55 +1,38 @@
 #include <amxmodx>
-#include <engine>
 #include <fakemeta>
 #include <hamsandwich>
 #include <reapi>
+
+#include "zmb.inc"
 
 #if AMXX_VERSION_NUM < 183
 	#include <dhudmessage>
 #endif
 
-#pragma semicolon               1
+#pragma semicolon                    1
 
-#define PLUGIN_NAME             "[ZMB] Core"
-#define PLUGIN_VERS             "0.0.7"
-#define PLUGIN_AUTH             "81x08"
+#define PLUGIN_NAME                  "[ZMB] Core"
+#define PLUGIN_VERS                  "0.0.8"
+#define PLUGIN_AUTH                  "81x08"
 
-#define SetBit(%0,%1)           ((%0) |= (1 << (%1 - 1)))
-#define ClearBit(%0,%1)         ((%0) &= ~(1 << (%1 - 1)))
-#define IsSetBit(%0,%1)         ((%0) & (1 << (%1 - 1)))
-#define InvertBit(%0,%1)        ((%0) ^= (1 << (%1 - 1)))
-#define IsNotSetBit(%0,%1)      (~(%0) & (1 << (%1 - 1)))
+#define MAX_PLAYERS                  32
+#define MAX_CLASSES                  10
 
-#define IsPlayer(%0)            (%0 && %0 <= g_iMaxPlayers)
+#define MAX_GRENADES                 4
+#define MAX_PRIMARY_WEAPONS          3
+#define MAX_SECONDARY_WEAPONS        3
 
-#define MAX_PLAYERS             32
-#define MAX_CLASSES             10
+#define CLASS_NONE                   0
 
-#define MAX_GRENADES            4
-#define MAX_PRIMARY_WEAPONS     3
-#define MAX_SECONDARY_WEAPONS   3
-
-#define CLASS_NONE              0
-
-#define HIDEHUD_FLASHLIGHT      (1 << 1)
-#define HIDEHUD_HEALTH          (1 << 3)
-
-const MsgId_TextMsg             = 77;
-const MsgId_ReceiveW            = 129;
-const MsgId_SendAudio           = 100;
-const MsgId_ScreenFade          = 98;
-const MsgId_HideWeapon          = 94;
+#define HIDEHUD_FLASHLIGHT           (1 << 1)
+#define HIDEHUD_HEALTH               (1 << 3)
 
 enum (+= 35)	{
 	TASK_ID_INFECT,
 
-	TASK_ID_PLAYER_HUD
-};
-
-enum Color	{
-	COLOR_RED,
-	COLOR_GREEN,
-	COLOR_BLUE
+	TASK_ID_PLAYER_HUD,
+	TASK_ID_RESTART_GAME,
+	TASK_ID_ZOMBIE_HP_REGENERATION
 };
 
 enum Positon	{
@@ -62,16 +45,17 @@ enum infoClass	{
 	CLASS_KNIFE_MODEL[64],
 	CLASS_PLAYER_MODEL[64],
 	
+	CLASS_ACCESS,
 	Float: CLASS_SPEED,
 	Float: CLASS_HEALTH,
 	Float: CLASS_GRAVITY,
+	
+	bool: CLASS_FOOTSTEPS,
+	
 	Float: CLASS_KNOCKBACK,
-	Float: CLASS_FACTOR_DMG
-};
-
-enum playerEquipment	{
-	PLAYER_EQUIPMENT_PRIMARY,
-	PLAYER_EQUIPMENT_SECONDARY
+	Float: CLASS_FACTOR_DAMAGE,
+	Float: CLASS_HP_REGENERATION,
+	Float: CLASS_HP_REGENERATION_MIN
 };
 
 enum listWeaponInfo	{
@@ -80,6 +64,11 @@ enum listWeaponInfo	{
 	WeaponIdType: WEAPON_ID,
 	WEAPON_BPAMMO,
 	Float: WEAPON_KNOCKBACK
+};
+
+enum playerEquipment	{
+	PLAYER_EQUIPMENT_PRIMARY,
+	PLAYER_EQUIPMENT_SECONDARY
 };
 
 enum _: bitsPlayer	{
@@ -105,7 +94,8 @@ new HamHook: g_iHamFwd_Entity_Block[13];
 
 new g_iMaxPlayers,
 	g_iZombieClasses,
-	g_iSyncPlayerHud;
+	g_iSyncPlayerHud,
+	g_iTimeRestartGame;
 
 new g_iWeather,
 	g_iActiveWeather;
@@ -123,27 +113,29 @@ new g_iNvgAlpha,
 new g_iNumberSoundsSurvirvorWin,
 	g_iNumberSoundsZombieDie,
 	g_iNumberSoundsZombieWin,
-	g_iNumberSoundsZombieScream,
-	g_iNumberSoundsZombieKnifeMiss,
-	g_iNumberSoundsZombieKnifeHits;
+	g_iNumberSoundsZombieScream;
 
 new g_infoZombieClass[MAX_CLASSES + 1][infoClass];
 
 new g_iCvar_HudType,
-	g_iCvar_SaveEquipment,
 	g_iCvar_HudColor[Color],
-	g_iCvar_BlockZombieFlashlight,
-	g_iCvar_StateKnockbackSitZombie;
-	
+	g_iCvar_TimeRestartGame;
+
+new bool: g_bCvar_SaveEquipment,
+	bool: g_bCvar_BlockZombieFlashlight,
+	bool: g_bCvar_StateKnockbackSitZombie;
+
 new Float: g_fCvar_ZombieRatio,
 	Float: g_fCvar_TimeInfections,
 	Float: g_fCvar_HudPosition[Positon],
 	Float: g_fCvar_MaxDistanceKnockback;
 
+new bool: g_bZombieUseNvg,
+	bool: g_bZombieStateNvg;
+
 new bool: g_bFog,
 	bool: g_bRoundEnd,
-	bool: g_bZombieUseNvg,
-	bool: g_bZombieStateNvg,
+	bool: g_bRestartGame,
 	bool: g_bInfectionBegan;
 
 new g_szFogColor[12],
@@ -152,25 +144,24 @@ new g_szFogColor[12],
 new g_szCvar_MapLightStyle[2],
 	g_szCvar_GameDescription[64];
 
+new gp_iClass[MAX_PLAYERS + 1],
+	gp_iSelectedClass[MAX_PLAYERS + 1];
+
 new gp_iBit[bitsPlayer],
-	gp_iClass[MAX_PLAYERS + 1],
-	gp_iMenuPosition[MAX_PLAYERS + 1],
-	gp_iSelectedClass[MAX_PLAYERS + 1],
-	gp_iEquipment[MAX_PLAYERS + 1][playerEquipment];
+	gp_iFlags[MAX_PLAYERS + 1],
+	gp_iEquipment[MAX_PLAYERS + 1][playerEquipment],
+	gp_iMenuPosition[MAX_PLAYERS + 1];
 
 new gp_szSteamId[MAX_PLAYERS + 1][35];
 
-new	Trie: g_tEquipment,
+new Trie: g_tEquipment,
 	Trie: g_tRemoveEntities,
-	Trie: g_tPrimaryWeapons,
-	Trie: g_tSecondaryWeapons;
+	Trie: g_tSoundsZombieKnife;
 
-new Array: g_aSoundsSurvirvorWin,
+new	Array: g_aSoundsSurvirvorWin,
 	Array: g_aSoundsZombieDie,
 	Array: g_aSoundsZombieWin,
-	Array: g_aSoundsZombieScream,
-	Array: g_aSoundsZombieKnifeMiss,
-	Array: g_aSoundsZombieKnifeHits;
+	Array: g_aSoundsZombieScream;
 
 /*================================================================================
  [PLUGIN]
@@ -190,32 +181,17 @@ public plugin_init()	{
 	Message_Init();
 	
 	ReAPI_Init();
-	Engine_Init();
 	FakeMeta_Init();
 	Hamsandwich_Init();
 
 	ClCmd_Init();
 	MenuCmd_Init();
 
+	register_dictionary("zmb_core.txt");
+	
 	g_iMaxPlayers = get_maxplayers();
 	
 	g_iSyncPlayerHud = CreateHudSyncObj();
-
-	new iCount;
-	
-	g_tPrimaryWeapons = TrieCreate();
-	
-	for(iCount = 1; iCount <= g_iPrimaryWeapons; iCount++)
-	{
-		TrieSetCell(g_tPrimaryWeapons, g_listPrimaryWeapons[iCount][WEAPON_CLASSNAME], iCount);
-	}
-	
-	g_tSecondaryWeapons = TrieCreate();
-	
-	for(iCount = 1; iCount <= g_iSecondaryWeapons; iCount++)
-	{
-		TrieSetCell(g_tSecondaryWeapons, g_listSecondaryWeapons[iCount][WEAPON_CLASSNAME], iCount);
-	}
 }
 
 public plugin_cfg()	{
@@ -235,7 +211,7 @@ LoadMain()	{
 	{
 		case 0:
 		{
-			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szFileDir);
+			UTIL_SetFileState("Core", "~ [ERROR] Конфигурационный файл ^"%s^" не найден.", szFileDir);
 		}
 		case 1:
 		{
@@ -249,10 +225,61 @@ ReadFile_Main(const szFileDir[])	{
 	
 	if(iFile)
 	{
-		new iStrLen;
+		new iStrLen, iKey, iBlock, iSize, iCount;
+		
 		new szBuffer[128], szBlock[32], szKey[32], szValue[64];
 		new szWeaponName[16], szClassName[16], szBpammo[6], szKnockback[6];
 
+		#define MAIN_BLOCK__NONE                          0
+		#define MAIN_BLOCK__WEATHER                       1
+		#define MAIN_BLOCK__NIGHT_VISION                  2
+		#define MAIN_BLOCK__EQUIPMENT_PRIMARY             3
+		#define MAIN_BLOCK__EQUIPMENT_SECONDARY           4
+		#define MAIN_BLOCK__EQUIPMENT_GRENADES            5
+		
+		new Trie: tMainsBlocks = TrieCreate();
+		
+		new const szMainsBlock[][] = {
+			"weather",
+			"nightvision",
+			"equipment-primary",
+			"equipment-secondary",
+			"equipment-grenades"
+		};
+		
+		for(iCount = 0, iSize = sizeof(szMainsBlock); iCount < iSize; iCount++)
+		{
+			TrieSetCell(tMainsBlocks, szMainsBlock[iCount], iCount + 1);
+		}
+		
+		#define MAIN_KEY__NONE                            0
+		#define MAIN_KEY__WEATHER                         1
+		#define MAIN_KEY__FOG                             2
+		#define MAIN_KEY__FOG_COLOR                       3
+		#define MAIN_KEY__FOG_DENSITY                     4
+		#define MAIN_KEY__ZOMBIE_USE_NVG                  5
+		#define MAIN_KEY__ZOMBIE_STATE_NVG                6
+		#define MAIN_KEY__NVG_ALPHA                       7
+		#define MAIN_KEY__NVG_COLOR                       8
+
+		new Trie: tMainsKeys = TrieCreate();
+
+		new const szMainsKeys[][] = {
+			"weather",
+			"fog",
+			"fog_color",
+			"fog_density",
+			"zombie_use_nvg",
+			"zombie_state_nvg",
+			"nvg_alpha",
+			"nvg_color"
+		};
+
+		for(iCount = 0, iSize = sizeof(szMainsKeys); iCount < iSize; iCount++)
+		{
+			TrieSetCell(tMainsKeys, szMainsKeys[iCount], iCount + 1);
+		}
+		
 		while(!(feof(iFile)))
 		{
 			fgets(iFile, szBuffer, charsmax(szBuffer));
@@ -263,218 +290,202 @@ ReadFile_Main(const szFileDir[])	{
 				continue;
 			}
 			
+			iKey = MAIN_KEY__NONE;
 			iStrLen = strlen(szBuffer);
 			
 			if(szBuffer[0] == '[' && szBuffer[iStrLen - 1] == ']')
 			{
+				iBlock = MAIN_BLOCK__NONE;
+				
 				copyc(szBlock, charsmax(szBlock), szBuffer[1], szBuffer[iStrLen - 1]);
 
+				if(!(TrieGetCell(tMainsBlocks, szBlock, iBlock)))
+				{
+					UTIL_SetFileState("Core", "~ [WARNING] Блок ^"%s^" в файле ^"%s^" не идентифицирован.", szBlock, szFileDir);
+				}
+				
 				continue;
 			}
-			
-			if(szBlock[0])
+
+			switch(iBlock)
 			{
-				if(szBlock[0] == 'e' && szBlock[1] == 'n' && szBlock[2] == 'd')
+				case MAIN_BLOCK__WEATHER:
 				{
-					continue;
-				}
+					strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
 
-				switch(szBlock[0])
-				{
-					case 'w':
+					UTIL_ConversionWord(szValue);
+
+					if(szValue[0])
 					{
-						if(equali(szBlock, "weather", 7))
-						{
-							strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
-							
-							trim(szKey);
-							trim(szValue);
-							
-							remove_quotes(szKey);
-							remove_quotes(szValue);
+						UTIL_ConversionWord(szKey);
 						
-							switch(szKey[0])
-							{
-								case 'w':
-								{
-									if(equali(szKey, "weather", 7))
-									{
-										g_iWeather = read_flags(szValue);
+						TrieGetCell(tMainsKeys, szKey, iKey);
 
-										setWeather(g_iWeather);
-									}
-								}
-								case 'f':
+						switch(iKey)
+						{
+							case MAIN_KEY__WEATHER:
+							{
+								g_iWeather = read_flags(szValue);
+
+								setWeather(g_iWeather);
+							}
+							case MAIN_KEY__FOG:
+							{
+								g_bFog = bool: str_to_num(szValue);
+							}
+							case MAIN_KEY__FOG_COLOR:
+							{
+								if(g_bFog)
 								{
-									if(equali(szKey, "fog"))
-									{
-										g_bFog = bool: str_to_num(szValue);
-										
-										continue;
-									}
-									
-									if(g_bFog)
-									{
-										if(equali(szKey, "fog_color", 9))
-										{
-											formatex(g_szFogColor, charsmax(g_szFogColor), szValue);
-										
-											continue;
-										}
-										
-										if(equali(szKey, "fog_density", 11))
-										{
-											formatex(g_szFogDensity, charsmax(g_szFogDensity), szValue);
-										}
-									}
+									formatex(g_szFogColor, charsmax(g_szFogColor), szValue);
 								}
+							}
+							case MAIN_KEY__FOG_DENSITY:
+							{
+								if(g_bFog)
+								{
+									formatex(g_szFogDensity, charsmax(g_szFogDensity), szValue);
+								}
+							}
+							default:
+							{
+								UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
 							}
 						}
 					}
-					case 'n':
-					{
-						if(equali(szBlock, "nightvision", 11))
-						{
-							strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
-							
-							trim(szKey);
-							trim(szValue);
-							
-							remove_quotes(szKey);
-							remove_quotes(szValue);
-							
-							switch(szKey[0])
-							{
-								case 'z':
-								{
-									if(equali(szKey, "zombie_use_nvg", 14))
-									{
-										g_bZombieUseNvg = bool: str_to_num(szValue);
-										
-										continue;
-									}
-									
-									if(g_bZombieUseNvg)
-									{
-										if(equali(szKey, "zombie_state_nvg", 16))
-										{
-											g_bZombieStateNvg = bool: str_to_num(szValue);
-										}
-									}
-								}
-								case 'n':
-								{
-									if(g_bZombieUseNvg)
-									{
-										if(equali(szKey, "nvg_alpha", 9))
-										{
-											g_iNvgAlpha = str_to_num(szValue);
-											
-											continue;
-										}
+				}
+				case MAIN_BLOCK__NIGHT_VISION:
+				{
+					strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
 
-										if(equali(szKey, "nvg_color", 9))
-										{
-											new szColor[Color][4];
-											
-											parse(
-												szValue,
-												szColor[COLOR_RED], charsmax(szColor[]),
-												szColor[COLOR_GREEN], charsmax(szColor[]),
-												szColor[COLOR_BLUE], charsmax(szColor[])
-											);
-											
-											g_iNvgColor[COLOR_RED] = str_to_num(szColor[COLOR_RED]);
-											g_iNvgColor[COLOR_GREEN] = str_to_num(szColor[COLOR_GREEN]);
-											g_iNvgColor[COLOR_BLUE] = str_to_num(szColor[COLOR_BLUE]);
-										}
-									}
+					UTIL_ConversionWord(szValue);
+
+					if(szValue[0])
+					{
+						UTIL_ConversionWord(szKey);
+						
+						TrieGetCell(tMainsKeys, szKey, iKey);
+						
+						switch(iKey)
+						{
+							case MAIN_KEY__ZOMBIE_USE_NVG:
+							{
+								g_bZombieUseNvg = bool: str_to_num(szValue);
+							}
+							case MAIN_KEY__ZOMBIE_STATE_NVG:
+							{
+								if(g_bZombieUseNvg)
+								{
+									g_bZombieStateNvg = bool: str_to_num(szValue);
 								}
+							}
+							case MAIN_KEY__NVG_ALPHA:
+							{
+								if(g_bZombieUseNvg)
+								{
+									g_iNvgAlpha = str_to_num(szValue);
+								}
+							}
+							case MAIN_KEY__NVG_COLOR:
+							{
+								if(g_bZombieUseNvg)
+								{
+									new szColor[Color][4];
+									
+									parse(
+										szValue,
+										szColor[COLOR_RED], charsmax(szColor[]),
+										szColor[COLOR_GREEN], charsmax(szColor[]),
+										szColor[COLOR_BLUE], charsmax(szColor[])
+									);
+									
+									g_iNvgColor[COLOR_RED] = str_to_num(szColor[COLOR_RED]);
+									g_iNvgColor[COLOR_GREEN] = str_to_num(szColor[COLOR_GREEN]);
+									g_iNvgColor[COLOR_BLUE] = str_to_num(szColor[COLOR_BLUE]);
+								}
+							}
+							default:
+							{
+								UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
 							}
 						}
 					}
-					case 'p':
-					{
-						if(equali(szBlock, "primary", 7))
-						{
-							g_iPrimaryWeapons++;
-							
-							parse(
-								szBuffer,
-								szWeaponName, charsmax(szWeaponName),
-								szClassName, charsmax(szClassName),
-								szBpammo, charsmax(szBpammo),
-								szKnockback, charsmax(szKnockback)
-							);
-							
-							formatex(
-								g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_NAME],
-								charsmax(g_listPrimaryWeapons[][WEAPON_NAME]),
-								szWeaponName
-							);
-							
-							formatex(
-								g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_CLASSNAME],
-								charsmax(g_listPrimaryWeapons[][WEAPON_CLASSNAME]),
-								szClassName
-							);
+				}
+				case MAIN_BLOCK__EQUIPMENT_PRIMARY:
+				{
+					g_iPrimaryWeapons++;
+					
+					parse(
+						szBuffer,
+						szWeaponName, charsmax(szWeaponName),
+						szClassName, charsmax(szClassName),
+						szBpammo, charsmax(szBpammo),
+						szKnockback, charsmax(szKnockback)
+					);
+					
+					formatex(
+						g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_NAME],
+						charsmax(g_listPrimaryWeapons[][WEAPON_NAME]),
+						szWeaponName
+					);
+					
+					formatex(
+						g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_CLASSNAME],
+						charsmax(g_listPrimaryWeapons[][WEAPON_CLASSNAME]),
+						szClassName
+					);
 
-							g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_ID] = rg_get_weapon_info(g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_CLASSNAME], WI_ID);
-							g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_BPAMMO] = str_to_num(szBpammo);
-							g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_KNOCKBACK] = _: str_to_float(szKnockback);
-						}
-					}
-					case 's':
-					{
-						if(equali(szBlock, "secondary", 9))
-						{
-							g_iSecondaryWeapons++;
-							
-							parse(
-								szBuffer,
-								szWeaponName, charsmax(szWeaponName),
-								szClassName, charsmax(szClassName),
-								szBpammo, charsmax(szBpammo),
-								szKnockback, charsmax(szKnockback)
-							);
+					g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_ID] = rg_get_weapon_info(g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_CLASSNAME], WI_ID);
+					g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_BPAMMO] = str_to_num(szBpammo);
+					g_listPrimaryWeapons[g_iPrimaryWeapons][WEAPON_KNOCKBACK] = _: str_to_float(szKnockback);
+				}
+				case MAIN_BLOCK__EQUIPMENT_SECONDARY:
+				{
+					g_iSecondaryWeapons++;
+					
+					parse(
+						szBuffer,
+						szWeaponName, charsmax(szWeaponName),
+						szClassName, charsmax(szClassName),
+						szBpammo, charsmax(szBpammo),
+						szKnockback, charsmax(szKnockback)
+					);
 
-							formatex(
-								g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_NAME],
-								charsmax(g_listSecondaryWeapons[][WEAPON_NAME]),
-								szWeaponName
-							);
-							
-							formatex(
-								g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_CLASSNAME],
-								charsmax(g_listSecondaryWeapons[][WEAPON_CLASSNAME]),
-								szClassName
-							);
+					formatex(
+						g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_NAME],
+						charsmax(g_listSecondaryWeapons[][WEAPON_NAME]),
+						szWeaponName
+					);
+					
+					formatex(
+						g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_CLASSNAME],
+						charsmax(g_listSecondaryWeapons[][WEAPON_CLASSNAME]),
+						szClassName
+					);
 
-							g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_ID] = rg_get_weapon_info(g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_CLASSNAME], WI_ID);
-							g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_BPAMMO] = str_to_num(szBpammo);
-							g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_KNOCKBACK] = _: str_to_float(szKnockback);
-						}
-					}
-					case 'g':
-					{
-						if(equali(szBlock, "grenades", 8))
-						{
-							remove_quotes(szBuffer);
+					g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_ID] = rg_get_weapon_info(g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_CLASSNAME], WI_ID);
+					g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_BPAMMO] = str_to_num(szBpammo);
+					g_listSecondaryWeapons[g_iSecondaryWeapons][WEAPON_KNOCKBACK] = _: str_to_float(szKnockback);
+				}
+				case MAIN_BLOCK__EQUIPMENT_GRENADES:
+				{
+					UTIL_ConversionWord(szBuffer);
 
-							formatex(
-								g_listGrenades[g_iGrenades],
-								charsmax(g_listGrenades[]),
-								szBuffer
-							);
+					formatex(
+						g_listGrenades[g_iGrenades],
+						charsmax(g_listGrenades[]),
+						szBuffer
+					);
 
-							g_iGrenades++;
-						}
-					}
+					g_iGrenades++;
 				}
 			}
 		}
 		
 		fclose(iFile);
+		
+		TrieDestroy(tMainsKeys);
+		TrieDestroy(tMainsBlocks);
 		
 		if(g_bFog)
 		{
@@ -493,7 +504,7 @@ LoadSounds()	{
 	{
 		case 0:
 		{
-			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szFileDir);
+			UTIL_SetFileState("Core", "~ [ERROR] Конфигурационный файл ^"%s^" не найден.", szFileDir);
 		}
 		case 1:
 		{
@@ -507,8 +518,64 @@ ReadFile_Sounds(const szFileDir[])	{
 	
 	if(iFile)
 	{
-		new iStrLen;
-		new szBuffer[128], szBlock[32], szPrecache[64];
+		new iStrLen, iKey, iBlock, iSize, iCount;
+
+		new szBuffer[64], szBlock[32], szKey[8], szValue[64], szPrecache[64];
+
+		#define SOUND_BLOCK__NONE                    0
+		#define SOUND_BLOCK__SURVIRVOR_WIN           1
+		#define SOUND_BLOCK__ZOMBIE_WIN              2
+		#define SOUND_BLOCK__ZOMBIE_DEATH            3
+		#define SOUND_BLOCK__ZOMBIE_SCREAM           4
+		#define SOUND_BLOCK__ZOMBIE_KNIFE            5
+		
+		new Trie: tSoundsBlocks = TrieCreate();
+		
+		new const szSoundsBlock[][] = {
+			"survirvor_win",
+			"zombie_win",
+			"zombie_death",
+			"zombie_scream",
+			"zombie_knife"
+		};
+		
+		for(iCount = 0, iSize = sizeof(szSoundsBlock); iCount < iSize; iCount++)
+		{
+			TrieSetCell(tSoundsBlocks, szSoundsBlock[iCount], iCount + 1);
+		}
+
+		new Trie: tSoundsKeys = TrieCreate();
+
+		new const szOldSounds[][] = {
+			"weapons/knife_hit1.wav",
+			"weapons/knife_hit2.wav",
+			"weapons/knife_hit3.wav",
+			"weapons/knife_hit4.wav", 
+			"weapons/knife_stab.wav",
+			"weapons/knife_slash1.wav",
+			"weapons/knife_slash2.wav",
+			"weapons/knife_deploy1.wav",
+			"weapons/knife_hitwall1.wav"
+		};
+		
+		new const szSoundsKeys[][] = {
+			"hit1",
+			"hit2",
+			"hit3",
+			"hit4",
+			"stab",
+			"slash1",
+			"slash2",
+			"deploy",
+			"hitwall"
+		};
+		
+		g_tSoundsZombieKnife = TrieCreate();
+		
+		for(iCount = 0, iSize = sizeof(szSoundsKeys); iCount < iSize; iCount++)
+		{
+			TrieSetCell(tSoundsKeys, szSoundsKeys[iCount], iCount);
+		}
 
 		while(!(feof(iFile)))
 		{
@@ -519,109 +586,148 @@ ReadFile_Sounds(const szFileDir[])	{
 			{
 				continue;
 			}
-			
+
 			iStrLen = strlen(szBuffer);
 			
 			if(szBuffer[0] == '[' && szBuffer[iStrLen - 1] == ']')
 			{
+				iBlock = SOUND_BLOCK__NONE;
+				
 				copyc(szBlock, charsmax(szBlock), szBuffer[1], szBuffer[iStrLen - 1]);
-
-				continue;
-			}
-			
-			if(szBlock[0])
-			{
-				if(szBlock[0] == 'e' && szBlock[1] == 'n' && szBlock[2] == 'd')
+				
+				if(!(TrieGetCell(tSoundsBlocks, szBlock, iBlock)))
 				{
-					continue;
+					UTIL_SetFileState("Core", "~ [WARNING] Блок ^"%s^" в файле ^"%s^" не идентифицирован.", szBlock, szFileDir);
 				}
 				
-				remove_quotes(szBuffer);
-
-				formatex(szPrecache, charsmax(szPrecache), "sound/%s", szBuffer);
-				
-				switch(file_exists(szPrecache))
+				continue;
+			}
+	
+			switch(iBlock)
+			{
+				case SOUND_BLOCK__SURVIRVOR_WIN:
 				{
-					case 0:
+					if(g_aSoundsSurvirvorWin || (g_aSoundsSurvirvorWin = ArrayCreate(64)))
 					{
-						UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szPrecache);
-					}
-					case 1:
-					{
-						switch(szBlock[0])
+						UTIL_ConversionWord(szBuffer);
+
+						formatex(szPrecache, charsmax(szPrecache), "sound/%s", szBuffer);
+						
+						switch(file_exists(szPrecache))
 						{
-							case 's':
+							case false:
 							{
-								if(equali(szBlock, "survirvor_win", 13))
+								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+							}
+							case true:
+							{
+								precache_sound(szBuffer);
+						
+								ArrayPushString(g_aSoundsSurvirvorWin, szBuffer);
+							}
+						}
+					}
+				}
+				case SOUND_BLOCK__ZOMBIE_WIN:
+				{
+					if(g_aSoundsZombieWin || (g_aSoundsZombieWin = ArrayCreate(64)))
+					{
+						UTIL_ConversionWord(szBuffer);
+
+						formatex(szPrecache, charsmax(szPrecache), "sound/%s", szBuffer);
+						
+						switch(file_exists(szPrecache))
+						{
+							case false:
+							{
+								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+							}
+							case true:
+							{
+								precache_sound(szBuffer);
+								
+								ArrayPushString(g_aSoundsZombieWin, szBuffer);
+							}
+						}
+					}
+				}
+				case SOUND_BLOCK__ZOMBIE_DEATH:
+				{
+					if(g_aSoundsZombieDie || (g_aSoundsZombieDie = ArrayCreate(64)))
+					{
+						UTIL_ConversionWord(szBuffer);
+
+						formatex(szPrecache, charsmax(szPrecache), "sound/%s", szBuffer);
+						
+						switch(file_exists(szPrecache))
+						{
+							case false:
+							{
+								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+							}
+							case true:
+							{
+								precache_sound(szBuffer);
+
+								ArrayPushString(g_aSoundsZombieDie, szBuffer);
+							}
+						}
+					}
+				}
+				case SOUND_BLOCK__ZOMBIE_SCREAM:
+				{
+					if(g_aSoundsZombieScream || (g_aSoundsZombieScream = ArrayCreate(64)))
+					{
+						UTIL_ConversionWord(szBuffer);
+
+						formatex(szPrecache, charsmax(szPrecache), "sound/%s", szBuffer);
+						
+						switch(file_exists(szPrecache))
+						{
+							case false:
+							{
+								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+							}
+							case true:
+							{
+								precache_sound(szBuffer);
+
+								ArrayPushString(g_aSoundsZombieScream, szBuffer);
+							}
+						}
+					}
+				}
+				case SOUND_BLOCK__ZOMBIE_KNIFE:
+				{
+					strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
+
+					UTIL_ConversionWord(szValue);
+
+					if(szValue[0])
+					{
+						UTIL_ConversionWord(szKey);
+						
+						if(TrieGetCell(tSoundsKeys, szKey, iKey))
+						{
+							formatex(szPrecache, charsmax(szPrecache), "sound/%s", szValue);
+							
+							switch(file_exists(szPrecache))
+							{
+								case false:
 								{
-									if(g_aSoundsSurvirvorWin || (g_aSoundsSurvirvorWin = ArrayCreate(64)))
-									{
-										precache_sound(szBuffer);
-										
-										ArrayPushString(g_aSoundsSurvirvorWin, szBuffer);
-									}
+									UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+								}
+								case true:
+								{
+									precache_sound(szValue);
+									
+									TrieSetString(g_tSoundsZombieKnife, szOldSounds[iKey], szValue);
 								}
 							}
-							case 'z':
-							{
-								if(equali(szBlock, "zombie_win", 10))
-								{
-									if(g_aSoundsZombieWin || (g_aSoundsZombieWin = ArrayCreate(64)))
-									{
-										precache_sound(szBuffer);
-										
-										ArrayPushString(g_aSoundsZombieWin, szBuffer);
-									}
-									
-									continue;
-								}
-
-								if(equali(szBlock, "zombie_death", 12))
-								{
-									if(g_aSoundsZombieDie || (g_aSoundsZombieDie = ArrayCreate(64)))
-									{
-										precache_sound(szBuffer);
-
-										ArrayPushString(g_aSoundsZombieDie, szBuffer);
-									}
-									
-									continue;
-								}
-
-								if(equali(szBlock, "zombie_scream", 13))
-								{
-									if(g_aSoundsZombieScream || (g_aSoundsZombieScream = ArrayCreate(64)))
-									{
-										precache_sound(szBuffer);
-
-										ArrayPushString(g_aSoundsZombieScream, szBuffer);
-									}
-									
-									continue;
-								}
-
-								if(equali(szBlock, "zombie_knife_miss", 17))
-								{
-									if(g_aSoundsZombieKnifeMiss || (g_aSoundsZombieKnifeMiss = ArrayCreate(64)))
-									{
-										precache_sound(szBuffer);
-
-										ArrayPushString(g_aSoundsZombieKnifeMiss, szBuffer);
-									}
-									
-									continue;
-								}
-
-								if(equali(szBlock, "zombie_knife_hits", 17))
-								{
-									if(g_aSoundsZombieKnifeHits || (g_aSoundsZombieKnifeHits = ArrayCreate(64)))
-									{
-										precache_sound(szBuffer);
-
-										ArrayPushString(g_aSoundsZombieKnifeHits, szBuffer);
-									}
-								}
-							}
+						}
+						else
+						{
+							UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
 						}
 					}
 				}
@@ -629,6 +735,9 @@ ReadFile_Sounds(const szFileDir[])	{
 		}
 		
 		fclose(iFile);
+		
+		TrieDestroy(tSoundsKeys);
+		TrieDestroy(tSoundsBlocks);
 		
 		if(g_aSoundsSurvirvorWin)
 		{
@@ -649,16 +758,6 @@ ReadFile_Sounds(const szFileDir[])	{
 		{
 			g_iNumberSoundsZombieScream = ArraySize(g_aSoundsZombieScream);
 		}
-		
-		if(g_aSoundsZombieKnifeMiss)
-		{
-			g_iNumberSoundsZombieKnifeMiss = ArraySize(g_aSoundsZombieKnifeMiss);
-		}
-		
-		if(g_aSoundsZombieKnifeHits)
-		{
-			g_iNumberSoundsZombieKnifeHits = ArraySize(g_aSoundsZombieKnifeHits);
-		}
 	}
 }
 
@@ -672,9 +771,9 @@ LoadClasses()	{
 	{
 		case 0:
 		{
-			writeDefaultClassFile(szFileDir);
+			pause("d");
 			
-			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" был не найден и был создан.", szFileDir);
+			UTIL_SetFileState("Core", "~ [ERROR] Конфигурационный файл ^"%s^" не найден. Плагин остановил свою работу.", szFileDir);
 		}
 		case 1:
 		{
@@ -688,10 +787,44 @@ ReadFile_Classes(const szFileDir[])	{
 	
 	if(iFile)
 	{
-		new iStrLen;
-		new szBuffer[128], szKey[32], szValue[64], szName[64];
-		
 		new infoZombieClass[infoClass];
+		
+		new iStrLen, iKey;
+		new szBuffer[128], szBlock[64], szKey[32], szValue[64], szPrecache[64];
+
+		#define CLASS_KEY__NONE                      0
+		#define CLASS_KEY__KNIFE_MODEL               1
+		#define CLASS_KEY__PLAYER_MODEL              2
+		#define CLASS_KEY__ACCESS                    3
+		#define CLASS_KEY__SPEED                     4
+		#define CLASS_KEY__HEALTH                    5
+		#define CLASS_KEY__GRAVITY                   6
+		#define CLASS_KEY__FOOTSTEPS                 7
+		#define CLASS_KEY__KNOCKBACK                 8
+		#define CLASS_KEY__FACTOR_DAMAGE             9
+		#define CLASS_KEY__HP_REGENERATION_          10
+		#define CLASS_KEY__HP_REGENERATION_MIN       11
+
+		new Trie: tClassesKeys = TrieCreate();
+		
+		new const szClassesKeys[][] = {
+			"knife_model",
+			"player_model",
+			"access",
+			"speed",
+			"health",
+			"gravity",
+			"footsteps",
+			"knockback",
+			"factor_damage",
+			"regeneration_hp",
+			"regeneration_hp_min"
+		};
+		
+		for(new iCount = 0, iSize = sizeof(szClassesKeys); iCount < iSize; iCount++)
+		{
+			TrieSetCell(tClassesKeys, szClassesKeys[iCount], iCount + 1);
+		}
 		
 		while(!(feof(iFile)))
 		{
@@ -703,13 +836,14 @@ ReadFile_Classes(const szFileDir[])	{
 				continue;
 			}
 			
+			iKey = CLASS_KEY__NONE;
 			iStrLen = strlen(szBuffer);
 
 			if(szBuffer[0] == '[' && szBuffer[iStrLen - 1] == ']')
 			{
-				copyc(szName, charsmax(szName), szBuffer[1], szBuffer[iStrLen - 1]);
+				copyc(szBlock, charsmax(szBlock), szBuffer[1], szBuffer[iStrLen - 1]);
 
-				if(equali(szName, "end", 3) || equali(szName, "конец", 5))
+				if(equali(szBlock, "end", 3) || equali(szBlock, "конец", 5))
 				{
 					if(infoZombieClass[CLASS_NAME][0])
 					{
@@ -717,11 +851,15 @@ ReadFile_Classes(const szFileDir[])	{
 							infoZombieClass[CLASS_NAME],
 							infoZombieClass[CLASS_KNIFE_MODEL],
 							infoZombieClass[CLASS_PLAYER_MODEL],
+							infoZombieClass[CLASS_ACCESS],
 							infoZombieClass[CLASS_SPEED],
 							infoZombieClass[CLASS_HEALTH],
 							infoZombieClass[CLASS_GRAVITY],
+							infoZombieClass[CLASS_FOOTSTEPS],
 							infoZombieClass[CLASS_KNOCKBACK],
-							infoZombieClass[CLASS_FACTOR_DMG]
+							infoZombieClass[CLASS_FACTOR_DAMAGE],
+							infoZombieClass[CLASS_HP_REGENERATION],
+							infoZombieClass[CLASS_HP_REGENERATION_MIN]
 						);
 					}
 					
@@ -729,9 +867,9 @@ ReadFile_Classes(const szFileDir[])	{
 				}
 				else
 				{
-					trim(szName);
+					trim(szBlock);
 					
-					infoZombieClass[CLASS_NAME] = szName;
+					infoZombieClass[CLASS_NAME] = szBlock;
 				}
 				
 				continue;
@@ -741,17 +879,17 @@ ReadFile_Classes(const szFileDir[])	{
 			{
 				strtok(szBuffer, szKey, charsmax(szKey), szValue, charsmax(szValue), '=');
 
-				trim(szKey);
-				trim(szValue);
+				UTIL_ConversionWord(szValue);
 				
-				remove_quotes(szKey);
-				remove_quotes(szValue);
-				
-				switch(szKey[0])
+				if(szValue[0])
 				{
-					case 'k':
+					UTIL_ConversionWord(szKey);
+					
+					TrieGetCell(tClassesKeys, szKey, iKey);
+					
+					switch(iKey)
 					{
-						if(equali(szKey, "knife_model", 11))
+						case CLASS_KEY__KNIFE_MODEL:
 						{
 							switch(file_exists(szValue))
 							{
@@ -766,20 +904,9 @@ ReadFile_Classes(const szFileDir[])	{
 									infoZombieClass[CLASS_KNIFE_MODEL] = szValue;
 								}
 							}
-							
-							continue;
 						}
-						
-						if(equali(szKey, "knockback", 9))
+						case CLASS_KEY__PLAYER_MODEL:
 						{
-							infoZombieClass[CLASS_KNOCKBACK] = _: str_to_float(szValue);
-						}
-					}
-					case 'p':
-					{
-						if(equali(szKey, "player_model", 12))
-						{
-							new szPrecache[64];
 							formatex(szPrecache, charsmax(szPrecache), "models/player/%s/%s.mdl", szValue, szValue);
 							
 							switch(file_exists(szPrecache))
@@ -796,33 +923,45 @@ ReadFile_Classes(const szFileDir[])	{
 								}
 							}
 						}
-					}
-					case 's':
-					{
-						if(equali(szKey, "speed", 5))
+						case CLASS_KEY__ACCESS:
+						{
+							infoZombieClass[CLASS_ACCESS] = read_flags(szValue);
+						}
+						case CLASS_KEY__SPEED:
 						{
 							infoZombieClass[CLASS_SPEED] = _: str_to_float(szValue);
 						}
-					}
-					case 'h':
-					{
-						if(equali(szKey, "health", 6))
+						case CLASS_KEY__HEALTH:
 						{
 							infoZombieClass[CLASS_HEALTH] = _: str_to_float(szValue);
 						}
-					}
-					case 'g':
-					{
-						if(equali(szKey, "gravity", 7))
+						case CLASS_KEY__GRAVITY:
 						{
 							infoZombieClass[CLASS_GRAVITY] = _: str_to_float(szValue);
 						}
-					}
-					case 'f':
-					{
-						if(equali(szKey, "factor_damage", 13))
+						case CLASS_KEY__FOOTSTEPS:
 						{
-							infoZombieClass[CLASS_FACTOR_DMG] = _: str_to_float(szValue);
+							infoZombieClass[CLASS_FOOTSTEPS] = bool: str_to_num(szValue);
+						}
+						case CLASS_KEY__KNOCKBACK:
+						{
+							infoZombieClass[CLASS_KNOCKBACK] = _: str_to_float(szValue);
+						}
+						case CLASS_KEY__FACTOR_DAMAGE:
+						{
+							infoZombieClass[CLASS_FACTOR_DAMAGE] = _: str_to_float(szValue);
+						}
+						case CLASS_KEY__HP_REGENERATION_:
+						{
+							infoZombieClass[CLASS_HP_REGENERATION] = _: str_to_float(szValue);
+						}
+						case CLASS_KEY__HP_REGENERATION_MIN:
+						{
+							infoZombieClass[CLASS_HP_REGENERATION_MIN] = _: str_to_float(szValue);
+						}
+						default:
+						{
+							UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
 						}
 					}
 				}
@@ -831,25 +970,13 @@ ReadFile_Classes(const szFileDir[])	{
 
 		fclose(iFile);
 		
+		TrieDestroy(tClassesKeys);
+		
 		if(g_iZombieClasses == 0)
 		{
-			precache_model("models/zmb/classes/v_knife.mdl");
-			precache_model("models/player/slum/slum.mdl");
-
-			addZombieClass(
-				.szName = "Slum",
-				.szKnifeModel = "models/zmb/classes/v_knife.mdl",
-				.szPlayerModel = "slum",
-				.fSpeed = 225.0,
-				.fHealth = 2200.0,
-				.fGravity = 0.7,
-				.fKnockback = 0.4,
-				.fFactorDmg = 1.2
-			);
+			pause("d");
 			
-			writeDefaultClassFile(szFileDir);
-			
-			UTIL_SetFileState("Core", "~ [INFO] Файл классов ^"%s^" пуст. Поэтому был создан класс ^"Slum^".", szFileDir);
+			UTIL_SetFileState("Core", "~ [INFO] Файл классов ^"%s^" пуст. Плагин остановил свою работу.", szFileDir);
 		}
 	}
 }
@@ -866,6 +993,7 @@ Cvars_Cfg()	{
 		iCvarId_SaveEquipment,
 		iCvarId_TimeInfections,
 		iCvarId_GameDescription,
+		iCvarId_TimeRestartGame,
 		iCvarId_MaxDistanceKnockback,
 		iCvarId_BlockZombieFlashlight,
 		iCvarId_StateKnockbackSitZombie;
@@ -878,6 +1006,7 @@ Cvars_Cfg()	{
 	iCvarId_SaveEquipment           = register_cvar("zmb_save_equipment",               "0");
 	iCvarId_TimeInfections          = register_cvar("zmb_time_infections",              "15");
 	iCvarId_GameDescription         = register_cvar("zmb_game_description",             "[ZMB] by 81x08");
+	iCvarId_TimeRestartGame         = register_cvar("zmb_time_restart_game",            "15");
 	iCvarId_MaxDistanceKnockback    = register_cvar("zmb_min_distance_knockback",       "500");
 	iCvarId_BlockZombieFlashlight   = register_cvar("zmb_block_zombie_flashlight",      "1");
 	iCvarId_StateKnockbackSitZombie = register_cvar("zmb_state_knockback_sit_zombie",   "1");
@@ -904,11 +1033,13 @@ Cvars_Cfg()	{
 	new szColor[8];
 	get_pcvar_string(iCvarId_HudColor, szColor, charsmax(szColor));
 
-	g_iCvar_HudColor                = UTIL_ParseHEXColor(szColor);
 	g_iCvar_HudType                 = get_pcvar_num(iCvarId_HudType);
-	g_iCvar_SaveEquipment           = get_pcvar_num(iCvarId_SaveEquipment);
-	g_iCvar_BlockZombieFlashlight   = get_pcvar_num(iCvarId_BlockZombieFlashlight);
-	g_iCvar_StateKnockbackSitZombie = get_pcvar_num(iCvarId_StateKnockbackSitZombie);
+	g_iCvar_HudColor                = UTIL_ParseHEXColor(szColor);
+	g_iCvar_TimeRestartGame         = get_pcvar_num(iCvarId_TimeRestartGame);
+	
+	g_bCvar_SaveEquipment           = bool: get_pcvar_num(iCvarId_SaveEquipment);
+	g_bCvar_BlockZombieFlashlight   = bool: get_pcvar_num(iCvarId_BlockZombieFlashlight);
+	g_bCvar_StateKnockbackSitZombie = bool: get_pcvar_num(iCvarId_StateKnockbackSitZombie);
 	
 	new szPosition[Positon][8], szCvarPosition[16];
 	get_pcvar_string(iCvarId_HudPosition, szCvarPosition, charsmax(szCvarPosition));
@@ -923,16 +1054,16 @@ Cvars_Cfg()	{
 	get_pcvar_string(iCvarId_MapLightStyle, g_szCvar_MapLightStyle, charsmax(g_szCvar_MapLightStyle));
 	get_pcvar_string(iCvarId_GameDescription, g_szCvar_GameDescription, charsmax(g_szCvar_GameDescription));
 
-	if(g_iCvar_SaveEquipment)
+	if(g_bCvar_SaveEquipment)
 	{
 		g_tEquipment = TrieCreate();
 	}
 	
-	if(g_iCvar_BlockZombieFlashlight)
+	if(g_bCvar_BlockZombieFlashlight)
 	{
-		register_impulse(100, "EngineHook_Impulse_Flashlight");
+		RegisterHookChain(RG_CBasePlayer_ImpulseCommands, "HC_Impulse_Flashlight", false);
 	}
-	
+
 	if(g_szCvar_GameDescription[0])
 	{
 		set_member_game(m_GameDesc, g_szCvar_GameDescription);
@@ -952,9 +1083,10 @@ public client_putinserver(iIndex)	{
 	SetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
 	
 	gp_iClass[iIndex] = random_num(1, g_iZombieClasses);
+	gp_iFlags[iIndex] = get_user_flags(iIndex);
 	gp_iSelectedClass[iIndex] = CLASS_NONE;
 	
-	if(g_iCvar_SaveEquipment)
+	if(g_bCvar_SaveEquipment)
 	{
 		get_user_authid(iIndex, gp_szSteamId[iIndex], charsmax(gp_szSteamId[]));
 		
@@ -980,6 +1112,7 @@ public client_disconnect(iIndex)	{
 		g_iAliveZombies--;
 		
 		remove_task(TASK_ID_PLAYER_HUD + iIndex);
+		remove_task(TASK_ID_ZOMBIE_HP_REGENERATION + iIndex);
 
 		if(g_bInfectionBegan)
 		{
@@ -992,27 +1125,24 @@ public client_disconnect(iIndex)	{
 			}
 		}
 	}
-	else
+	else if(IsSetBit(gp_iBit[BIT_HUMAN], iIndex))
 	{
-		if(IsSetBit(gp_iBit[BIT_HUMAN], iIndex))
-		{
-			g_iAliveHumans--;
-		}
+		g_iAliveHumans--;
 	}
-	
+
 	for(new iCount = BIT_NONE; iCount < BIT_MAX; iCount++)
 	{
 		ClearBit(gp_iBit[iCount], iIndex);
 	}
 
-	switch(g_iCvar_SaveEquipment)
+	switch(g_bCvar_SaveEquipment)
 	{
-		case 0:
+		case false:
 		{
 			gp_iEquipment[iIndex][PLAYER_EQUIPMENT_PRIMARY] = 0;
 			gp_iEquipment[iIndex][PLAYER_EQUIPMENT_SECONDARY] = 0;
 		}
-		case 1:
+		case true:
 		{
 			TrieSetArray(g_tEquipment, gp_szSteamId[iIndex], gp_iEquipment[iIndex], sizeof(gp_iEquipment[][]));
 		}
@@ -1025,6 +1155,8 @@ public client_disconnect(iIndex)	{
  [EVENT]
 =================================================================================*/
 Event_Init()	{
+	g_bRestartGame = true;
+	
 	register_event("InitHUD", "EventHook_InitHUD", "b");
 	register_event("HLTV", "EventHook_HLTV", "a", "1=0", "2=0");
 	
@@ -1047,6 +1179,23 @@ public EventHook_InitHUD(const iIndex)	{
 
 public EventHook_HLTV()	{
 	g_bRoundEnd = false;
+	
+	if(g_bRestartGame)
+	{
+		if(task_exists(TASK_ID_RESTART_GAME))
+		{
+			return PLUGIN_HANDLED;
+		}
+		
+		if(g_iCvar_TimeRestartGame <= 0)
+		{
+			g_bRestartGame = false;
+		}
+		else
+		{
+			set_task(1.0, "taskRestartGame", TASK_ID_RESTART_GAME, .flags = "a", .repeat = (g_iTimeRestartGame = g_iCvar_TimeRestartGame));
+		}
+	}
 
 	for(new iCount = 0; iCount < 13; iCount++)
 	{
@@ -1062,6 +1211,7 @@ public EventHook_HLTV()	{
 			ClearBit(gp_iBit[BIT_INFECT], iIndex);
 			
 			remove_task(TASK_ID_PLAYER_HUD + iIndex);
+			remove_task(TASK_ID_ZOMBIE_HP_REGENERATION + iIndex);
 
 			if(IsSetBit(gp_iBit[BIT_NIGHT_VISION], iIndex))
 			{
@@ -1081,13 +1231,22 @@ public EventHook_HLTV()	{
 
 	g_iAliveHumans = 0;
 	g_iAliveZombies = 0;
+	
+	return PLUGIN_CONTINUE;
 }
 
 public LogEventHook_RoundStart()	{
+	if(g_bRestartGame)
+	{
+		return PLUGIN_HANDLED;
+	}
+	
 	if(!(g_bRoundEnd) && !(g_bInfectionBegan))
 	{
 		set_task(g_fCvar_TimeInfections, "taskInfect", TASK_ID_INFECT);
 	}
+	
+	return PLUGIN_CONTINUE;
 }
 
 public LogEventHook_RoundEnd()	{
@@ -1110,36 +1269,43 @@ Message_Init()	{
 }
 
 public MessageHook_TextMsg()	{
-	new szArg[16];
+	new szArg[16], szMsg[64];
 	get_msg_arg_string(2, szArg, charsmax(szArg));
 
-	switch(szArg[1])
+	static Trie: tTextMsg;
+	
+	if(tTextMsg == Invalid_Trie)
 	{
-		case 'C':
+		#define MAX_TEXT_MSG    5
+		
+		enum eTextMsg
 		{
-			if(equal(szArg[1], "CTs_Win", 7))
-			{
-				set_msg_arg_string(2, "Люди победили заразу!");
-			}
-		}
-		case 'R':
+			TEXT_MSG_KEY,
+			TEXT_MSG_VALUE
+		};
+		
+		new const szTextMsg[MAX_TEXT_MSG][eTextMsg][] =
 		{
-			if(equal(szArg[1], "Round_Draw", 10))
-			{
-				set_msg_arg_string(2, "На этот раз ничья...");
-			}
-		}
-		case 'T':
+			{"#CTs_Win", "ZMB__TEXT_MSG_CT_WIN"},
+			{"#Round_Draw", "ZMB__TEXT_MSG_ROUND_DRAW"},
+			{"#Target_Saved", "ZMB__TEXT_MSG_ROUND_DRAW"},
+			{"Round is Over!", "ZMB__TEXT_MSG_ROUND_DRAW"},
+			{"#Terrorists_Win", "ZMB__TEXT_MSG_TERRORIST_WIN"}
+		}; 
+		
+		tTextMsg = TrieCreate();
+
+		for(new iCount = 0; iCount < MAX_TEXT_MSG; iCount++)
 		{
-			if(equal(szArg[1], "Target_Saved", 12))
-			{
-				set_msg_arg_string(2, "На этот раз ничья...");
-			}
-			else if(equal(szArg[1], "Terrorists_Win", 14))
-			{
-				set_msg_arg_string(2, "Зомби захватили весь мир!");
-			}
+			formatex(szMsg, charsmax(szMsg), "%L", LANG_SERVER, szTextMsg[iCount][TEXT_MSG_VALUE]);
+
+			TrieSetString(tTextMsg, szTextMsg[iCount][TEXT_MSG_KEY], szMsg);
 		}
+	}
+	
+	if(TrieGetString(tTextMsg, szArg, szMsg, charsmax(szMsg)))
+	{
+		set_msg_arg_string(2, szMsg);
 	}
 }
 
@@ -1183,7 +1349,7 @@ ReAPI_Init()	{
 	RegisterHookChain(RG_ShowVGUIMenu,            "HC_ShowVGUIMenu_Pre",            false);
 	RegisterHookChain(RG_CBasePlayer_Spawn,       "HC_CBasePlayer_Spawn_Post",      true);
 	RegisterHookChain(RG_CBasePlayer_Killed,      "HC_CBasePlayer_Killed_Post",     true);
-	RegisterHookChain(RG_CBasePlayer_PreThink,    "HC_CBasePlayer_PreThink_Pre",    false);
+	RegisterHookChain(RG_CBasePlayer_TakeDamage,  "HC_CBasePlayer_TakeDamage_Post", true);
 	RegisterHookChain(RG_CBasePlayer_TraceAttack, "HC_CBasePlayer_TraceAttack_Pre", false);
 }
 
@@ -1238,7 +1404,7 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 	{
 		return HC_CONTINUE;
 	}
-	
+
 	ClearBit(gp_iBit[BIT_ALIVE], iVictim);
 	
 	if(IsSetBit(gp_iBit[BIT_INFECT], iVictim))
@@ -1246,6 +1412,7 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 		g_iAliveZombies--;
 		
 		remove_task(TASK_ID_PLAYER_HUD + iVictim);
+		remove_task(TASK_ID_ZOMBIE_HP_REGENERATION + iVictim);
 		
 		if(IsSetBit(gp_iBit[BIT_NIGHT_VISION], iVictim))
 		{
@@ -1262,10 +1429,21 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 	return HC_CONTINUE;
 }
 
-public HC_CBasePlayer_PreThink_Pre(const iIndex)	{
-	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+public HC_CBasePlayer_TakeDamage_Post(const iVictim)	{
+	if(IsSetBit(gp_iBit[BIT_INFECT], iVictim))
 	{
-		set_entvar(iIndex, var_flTimeStepSound, 999);
+		if(g_infoZombieClass[gp_iClass[iVictim]][CLASS_HP_REGENERATION] && g_infoZombieClass[gp_iClass[iVictim]][CLASS_HP_REGENERATION_MIN])
+		{
+			if(!(task_exists(TASK_ID_ZOMBIE_HP_REGENERATION + iVictim)))
+			{
+				static Float: fHealth; fHealth = get_entvar(iVictim, var_health);
+
+				if(fHealth > 0.0 && fHealth < g_infoZombieClass[gp_iClass[iVictim]][CLASS_HP_REGENERATION_MIN])
+				{
+					set_task(1.0, "taskZombieHealthRegeneration", iVictim + TASK_ID_ZOMBIE_HP_REGENERATION, .flags = "b");
+				}
+			}
+		}
 	}
 }
 
@@ -1283,7 +1461,10 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 		
 		if(fArmor > 0.0)
 		{
-			fDamage *= g_infoZombieClass[gp_iClass[iAttacker]][CLASS_FACTOR_DMG];
+			if(g_infoZombieClass[gp_iClass[iAttacker]][CLASS_FACTOR_DAMAGE])
+			{
+				fDamage *= g_infoZombieClass[gp_iClass[iAttacker]][CLASS_FACTOR_DAMAGE];
+			}
 			
 			fArmor -= fDamage;
 			
@@ -1312,7 +1493,7 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 	
 	if(IsSetBit(gp_iBit[BIT_HUMAN], iAttacker) && IsSetBit(gp_iBit[BIT_INFECT], iVictim))
 	{
-		if(g_iCvar_StateKnockbackSitZombie)
+		if(g_bCvar_StateKnockbackSitZombie)
 		{
 			static iFlags; iFlags = get_entvar(iVictim, var_flags);
 			
@@ -1336,28 +1517,21 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 		get_entvar(iVictim, var_velocity, fVelocity);
 		
 		fVelocityZ = fVelocity[2];
-		
-		static iPrimaryWeaponListId, iSecondaryWeaponListId;
-		getPlayerActiveWeaponListId(iAttacker, iPrimaryWeaponListId, iSecondaryWeaponListId);
 
 		static Float: fFactorDirection = 0.0;
 
-		if(iPrimaryWeaponListId && g_listPrimaryWeapons[iPrimaryWeaponListId][WEAPON_KNOCKBACK] > 0.0)
-		{
-			fFactorDirection = g_listPrimaryWeapons[iPrimaryWeaponListId][WEAPON_KNOCKBACK];
-		}
-		
-		if(iSecondaryWeaponListId && g_listPrimaryWeapons[iSecondaryWeaponListId][WEAPON_KNOCKBACK] > 0.0)
-		{
-			fFactorDirection = g_listPrimaryWeapons[iSecondaryWeaponListId][WEAPON_KNOCKBACK];
-		}
+		fFactorDirection = getPlayerActiveWeaponKnockback(iAttacker);
 
 		if(fFactorDirection)
 		{
 			UTIL_VecMulScalar(fDirection, fDamage, fDirection);
 			UTIL_VecMulScalar(fDirection, fFactorDirection, fDirection);
-			UTIL_VecMulScalar(fDirection, g_infoZombieClass[gp_iClass[iVictim]][CLASS_KNOCKBACK], fDirection);
 			
+			if(g_infoZombieClass[gp_iClass[iVictim]][CLASS_KNOCKBACK])
+			{
+				UTIL_VecMulScalar(fDirection, g_infoZombieClass[gp_iClass[iVictim]][CLASS_KNOCKBACK], fDirection);
+			}
+
 			UTIL_VecAdd(fDirection, fVelocity, fVelocity);
 
 			fDirection[2] = fVelocityZ;
@@ -1369,22 +1543,18 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 	return HC_CONTINUE;
 }
 
-/*================================================================================
- [Engine]
-=================================================================================*/
-Engine_Init()	{
-}
-
-public EngineHook_Impulse_Flashlight(const iIndex)	{
-	if(g_iCvar_BlockZombieFlashlight)
+public HC_Impulse_Flashlight(const iIndex)	{
+	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
 	{
-		if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
+		if(get_entvar(iIndex, var_impulse) == 100)
 		{
-			return PLUGIN_HANDLED;
+			set_entvar(iIndex, var_impulse, 0);
+			
+			return HC_SUPERCEDE;
 		}
 	}
-	
-	return PLUGIN_CONTINUE;
+
+	return HC_CONTINUE;
 }
 
 /*================================================================================
@@ -1441,10 +1611,10 @@ public FakeMetaHook_Spawn_Post(const iEntity)	{
 		return FMRES_IGNORED;
 	}
 	
-	static szClassName[20];
-	get_entvar(iEntity, var_classname, szClassName, charsmax(szClassName));
+	static szBuyZoneClassName[20];
+	get_entvar(iEntity, var_classname, szBuyZoneClassName, charsmax(szBuyZoneClassName));
 	
-	if(TrieKeyExists(g_tRemoveEntities, szClassName))
+	if(TrieKeyExists(g_tRemoveEntities, szBuyZoneClassName))
 	{
 		set_entvar(iEntity, var_flags, FL_KILLME);
 	}
@@ -1459,49 +1629,12 @@ public FakeMetaHook_EmitSound_Pre(const iIndex, const iChannel, const szSample[]
 		{
 			new szSound[64];
 
-			if(szSample[0] == 'i' && szSample[6] == 'n' && szSample[7] == 'v' && szSample[8] == 'g')
-			{
-				return FMRES_SUPERCEDE;
-			}
-			
 			if(szSample[8] == 'k' && szSample[9] == 'n' && szSample[10] == 'i')
 			{
-				if(g_iNumberSoundsZombieKnifeMiss)
+				if(TrieGetString(g_tSoundsZombieKnife, szSample, szSound, charsmax(szSound)) && szSound[0])
 				{
-					/* [Knife slash] */
-					if(szSample[14] == 's' && szSample[15] == 'l' && szSample[16] == 'a')
-					{
-						ArrayGetString(g_aSoundsZombieKnifeMiss, random(g_iNumberSoundsZombieKnifeMiss), szSound, charsmax(szSound));
-				
-						emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
-						
-						return FMRES_SUPERCEDE;
-					}
-				}
-				
-				/* [Knife [hit|stab] */
-				if((szSample[14] == 'h' && szSample[15] == 'i' && szSample[16] == 't') || (szSample[14] == 's' && szSample[15] == 't' && szSample[16] == 'a'))
-				{
-					/* [Wall] */
-					if(szSample[17] == 'w' && szSample[18] == 'a' && szSample[19] == 'l')
-					{
-						if(g_iNumberSoundsZombieKnifeMiss)
-						{
-							ArrayGetString(g_aSoundsZombieKnifeMiss, random(g_iNumberSoundsZombieKnifeMiss), szSound, charsmax(szSound));
-				
-							emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
-						}
-					}
-					else
-					{
-						if(g_iNumberSoundsZombieKnifeHits)
-						{
-							ArrayGetString(g_aSoundsZombieKnifeHits, random(g_iNumberSoundsZombieKnifeHits), szSound, charsmax(szSound));
-				
-							emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
-						}
-					}
-
+					emit_sound(iIndex, iChannel, szSound, fVolume, fAttn, iFlag, iPitch);
+					
 					return FMRES_SUPERCEDE;
 				}
 			}
@@ -1575,8 +1708,8 @@ public HamHook_Knife_Deploy_Post(const iEntity)	{
 	{
 		if(g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL])
 		{
-			entity_set_string(iIndex, EV_SZ_viewmodel, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL]);
-			entity_set_string(iIndex, EV_SZ_weaponmodel, "");
+			set_entvar(iIndex, var_viewmodel, g_infoZombieClass[gp_iClass[iIndex]][CLASS_KNIFE_MODEL]);
+			set_entvar(iIndex, var_weaponmodel, "");
 		}
 	}
 	
@@ -1594,15 +1727,7 @@ public HamHook_Item_PreFrame_Post(const iIndex)	{
 }
 
 public HamHook_EntityBlock_Pre(const iEntity, const iIndex)	{
-	if(IsPlayer(iIndex))
-	{
-		if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
-		{
-			return HAM_SUPERCEDE;
-		}
-	}
-
-	return HAM_IGNORED;
+	return (IsPlayer(iIndex) && IsSetBit(gp_iBit[BIT_INFECT], iIndex)) ? HAM_SUPERCEDE : HAM_IGNORED;
 }
 
 /*================================================================================
@@ -1634,15 +1759,7 @@ public ClCmd_Block()	{
 }
 
 public ClCmd_Drop(const iIndex)	{
-	if(IsSetBit(gp_iBit[BIT_INFECT], iIndex))
-	{
-		if(WeaponIdType: get_user_weapon(iIndex) == WEAPON_KNIFE)
-		{
-			return PLUGIN_HANDLED;
-		}
-	}
-	
-	return PLUGIN_CONTINUE;
+	return (IsSetBit(gp_iBit[BIT_INFECT], iIndex) && WeaponIdType: get_user_weapon(iIndex) == WEAPON_KNIFE) ? PLUGIN_HANDLED : PLUGIN_CONTINUE;
 }
 
 public ClCmd_NightVision(const iIndex)	{
@@ -1735,6 +1852,12 @@ public Handler_Main(const iIndex, const iKey)	{
 			}
 
 			rg_join_team(iIndex, iRandomTeam);
+			
+			/*
+				TEMP:
+					Временный фикс.
+			*/
+			HC_CBasePlayer_Killed_Post(iIndex, 0);
 		}
 	}
 	
@@ -1779,15 +1902,24 @@ ShowMenu_ChooseClass(const iIndex, const iPos)	{
 		}
 		else
 		{
-			iBitKeys |= (1 << iItem);
-			
 			if(gp_iSelectedClass[iIndex] == iCount)
 			{
+				iBitKeys |= (1 << iItem);
+				
 				iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \d%s \r[ \yON SPAWN \r]^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
 			}
 			else
 			{
-				iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+				if(gp_iFlags[iIndex] & g_infoZombieClass[iCount][CLASS_ACCESS])
+				{
+					iBitKeys |= (1 << iItem);
+					
+					iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+				}
+				else
+				{
+					iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \d%s \r[ \yNO ACCESS \r]^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+				}
 			}
 		}
 	}
@@ -1832,15 +1964,8 @@ public Handler_ChooseClass(const iIndex, const iKey)	{
 			}
 			else
 			{
-				if(gp_iSelectedClass[iIndex] == iClass)
-				{
-					gp_iSelectedClass[iIndex] = CLASS_NONE;
-				}
-				else
-				{
-					gp_iSelectedClass[iIndex] = iClass;
-				}
-				
+				gp_iSelectedClass[iIndex] = (gp_iSelectedClass[iIndex] == iClass) ? CLASS_NONE : iClass;
+
 				/*
 					TODO:
 						Добавть сообщение, что класс будет доступен
@@ -2128,7 +2253,7 @@ public taskInfect()	{
 		{
 			new iInfected = iPlayers[random(iPlayersNum)];
 			
-			if(IsNotSetBit(gp_iBit[BIT_INFECT], iInfected))
+			if(IsSetBit(gp_iBit[BIT_HUMAN], iInfected))
 			{
 				setPlayerInfect(iInfected);
 				
@@ -2142,6 +2267,31 @@ public taskInfect()	{
 		if(IsSetBit(gp_iBit[BIT_HUMAN], iIndex))
 		{
 			rg_set_user_team(iIndex, TEAM_CT);
+		}
+	}
+}
+
+public taskRestartGame()	{
+	if(--g_iTimeRestartGame == 0)
+	{
+		server_cmd("sv_restart 1");
+		
+		g_bRestartGame = false;
+	}
+	else
+	{
+		switch(g_iCvar_HudType)
+		{
+			case 0:	/* [HUD] */
+			{
+				set_hudmessage(g_iCvar_HudColor[COLOR_RED], g_iCvar_HudColor[COLOR_GREEN], g_iCvar_HudColor[COLOR_BLUE], g_fCvar_HudPosition[POS_X], g_fCvar_HudPosition[POS_Y], 0, 0.0, 0.9, 0.15, 0.15, -1);
+				ShowSyncHudMsg(0, g_iSyncPlayerHud, "Рестарт игры через [%d]", g_iTimeRestartGame);
+			}
+			case 1:	/* [DHUD] */
+			{
+				set_dhudmessage(g_iCvar_HudColor[COLOR_RED], g_iCvar_HudColor[COLOR_GREEN], g_iCvar_HudColor[COLOR_BLUE], g_fCvar_HudPosition[POS_X], g_fCvar_HudPosition[POS_Y], 0, 0.0, 0.9, 0.15, 0.15);
+				show_dhudmessage(0, "Рестарт игры через [%d]", g_iTimeRestartGame);
+			}
 		}
 	}
 }
@@ -2166,18 +2316,26 @@ public taskPlayerHud(iIndex)	{
 	}
 }
 
+public taskZombieHealthRegeneration(iIndex)	{
+	iIndex -= TASK_ID_ZOMBIE_HP_REGENERATION;
+	
+	static Float: fHealth; fHealth = get_entvar(iIndex, var_health);
+	
+	if(fHealth < g_infoZombieClass[gp_iClass[iIndex]][CLASS_HEALTH])
+	{
+		fHealth += g_infoZombieClass[gp_iClass[iIndex]][CLASS_HP_REGENERATION];
+
+		set_entvar(iIndex, var_health, (fHealth > g_infoZombieClass[gp_iClass[iIndex]][CLASS_HEALTH]) ? g_infoZombieClass[gp_iClass[iIndex]][CLASS_HEALTH] : fHealth);
+	}
+}
+
 /*================================================================================
  [ZMB]
 =================================================================================*/
 stock setWeather(const iWeather)	{
 	if(iWeather)
 	{
-		g_iActiveWeather = g_iWeather;
-
-		if(g_iActiveWeather == 3)
-		{
-			g_iActiveWeather = random_num(1, 2);
-		}
+		g_iActiveWeather = (g_iWeather == 3) ? random_num(1, 2) : g_iWeather;
 	}
 }
 
@@ -2197,7 +2355,7 @@ stock setPlayerInfect(const iIndex)	{
 
 	UTIL_SetPlayerHideHud(
 		.iIndex = iIndex,
-		.iHideHud = (g_iCvar_BlockZombieFlashlight ? HIDEHUD_FLASHLIGHT : (1 << 0)) | HIDEHUD_HEALTH
+		.iHideHud = (g_bCvar_BlockZombieFlashlight ? HIDEHUD_FLASHLIGHT : (1 << 0)) | HIDEHUD_HEALTH
 	);
 	
 	UTIL_SetPlayerScreenFade(
@@ -2228,23 +2386,26 @@ stock setPlayerInfect(const iIndex)	{
 		set_entvar(iIndex, var_gravity, g_infoZombieClass[iClass][CLASS_GRAVITY]);
 	}
 	
-	set_entvar(iIndex, var_flTimeStepSound, 999);
-	
+	if(g_infoZombieClass[iClass][CLASS_FOOTSTEPS])
+	{
+		rg_set_user_footsteps(iIndex, true);
+	}
+
 	rg_set_user_team(iIndex, TEAM_TERRORIST);
 
 	ExecuteHamB(Ham_Item_PreFrame, iIndex);
 
- 	UTIL_RemovePlayerSlotWeapon(iIndex, PRIMARY_WEAPON_SLOT);
-	UTIL_RemovePlayerSlotWeapon(iIndex, PISTOL_SLOT);
-	UTIL_RemovePlayerSlotWeapon(iIndex, GRENADE_SLOT);
+ 	rg_remove_items_by_slot(iIndex, PRIMARY_WEAPON_SLOT);
+	rg_remove_items_by_slot(iIndex, PISTOL_SLOT);
+	rg_remove_items_by_slot(iIndex, GRENADE_SLOT);
 
- 	new iItem = get_member(iIndex, m_pActiveItem);
+	new iItem = rg_find_weapon_bpack_by_name(iIndex, "weapon_knife");
 	
-	if(iItem > 0)
+	if(iItem)
 	{
-		ExecuteHamB(Ham_Item_Deploy, iItem);
+		iItem != get_member(iIndex, m_pActiveItem) ? rg_switch_weapon(iIndex, iItem) : ExecuteHamB(Ham_Item_Deploy, iItem);
 	}
-	
+
 	if(g_bZombieUseNvg)
 	{
 		if(g_bZombieStateNvg)
@@ -2253,7 +2414,7 @@ stock setPlayerInfect(const iIndex)	{
 		}
 	}
 	
-	if(g_iCvar_BlockZombieFlashlight)
+	if(g_bCvar_BlockZombieFlashlight)
 	{
 		new iEffects = get_entvar(iIndex, var_effects);
 		
@@ -2305,23 +2466,28 @@ stock setPlayerNightVision(const iIndex, const bool: bNightVision)	{
 	InvertBit(gp_iBit[BIT_NIGHT_VISION], iIndex);
 }
 
-stock getPlayerActiveWeaponListId(const iIndex, &iPrimaryWeaponListId, &iSecondaryWeaponListId)	{
- 	new iItem = get_member(iIndex, m_pActiveItem), szWeaponName[20];
+stock Float: getPlayerActiveWeaponKnockback(const iIndex)	{
+ 	static WeaponIdType: iWeaponId; new iCount;
 	
- 	if(iItem > 0)
- 	{
-        get_entvar(iItem, var_classname, szWeaponName, charsmax(szWeaponName));
-
-        if(!(TrieGetCell(g_tPrimaryWeapons, szWeaponName, iPrimaryWeaponListId)))
+	iWeaponId = WeaponIdType: get_user_weapon(iIndex); 
+	
+	for(iCount = 0; iCount < g_iPrimaryWeapons; iCount++)
+	{
+		if(iWeaponId == g_listPrimaryWeapons[iCount][WEAPON_ID])
 		{
-			iPrimaryWeaponListId = 0;
+			return g_listPrimaryWeapons[iCount][WEAPON_KNOCKBACK];
 		}
-		
-        if(!(TrieGetCell(g_tSecondaryWeapons, szWeaponName, iSecondaryWeaponListId)))
+	}
+	
+	for(iCount = 0; iCount < g_iSecondaryWeapons; iCount++)
+	{
+		if(iWeaponId == g_listSecondaryWeapons[iCount][WEAPON_ID])
 		{
-			iSecondaryWeaponListId = 0;
+			return g_listSecondaryWeapons[iCount][WEAPON_KNOCKBACK];
 		}
- 	}
+	}
+	
+	return 0.0;
 }
 
 stock givePlayerPrimaryWeapon(const iIndex, const iPrimaryWeaponId)	{
@@ -2351,170 +2517,20 @@ stock givePlayerGrenades(const iIndex)	{
 	}
 }
 
-stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[], const Float: fSpeed, const Float: fHealth, const Float: fGravity, const Float: fKnockback, const Float: fFactorDmg)	{
+stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[], const iAccessFlags, const Float: fSpeed, const Float: fHealth, const Float: fGravity, const bool: bFootSteps, const Float: fKnockback, const Float: fFactorDamage, const Float: fHealthRegeneration, const Float: fHealthRegenerationMin)	{
 	new iClass = g_iZombieClasses += 1;
 
 	copy(g_infoZombieClass[iClass][CLASS_NAME], 64, szName);
 	copy(g_infoZombieClass[iClass][CLASS_KNIFE_MODEL], 64, szKnifeModel);
 	copy(g_infoZombieClass[iClass][CLASS_PLAYER_MODEL], 64, szPlayerModel);
 	
+	g_infoZombieClass[iClass][CLASS_ACCESS] = iAccessFlags;
 	g_infoZombieClass[iClass][CLASS_SPEED] = _: fSpeed;
 	g_infoZombieClass[iClass][CLASS_HEALTH] = _: fHealth;
 	g_infoZombieClass[iClass][CLASS_GRAVITY] = _: fGravity;
+	g_infoZombieClass[iClass][CLASS_FOOTSTEPS] = bool: bFootSteps;
 	g_infoZombieClass[iClass][CLASS_KNOCKBACK] = _: fKnockback;
-	g_infoZombieClass[iClass][CLASS_FACTOR_DMG] = _: fFactorDmg;
-}
-
-stock writeDefaultClassFile(const szFileDir[])	{
-	write_file(
-		szFileDir,
-		"\
-			[Slum]^n\
-			^tknife_model = ^"models/zmb/classes/v_knife.mdl^"^n\
-			^tplayer_model = ^"slum^"^n^n\
-			^tspeed = ^"225^"^n\
-			^thealth = ^"2200^"^n\
-			^tgravity = ^"0.7^"^n\
-			^tfactor_damage = ^"1.2^"^n\
-			[end]\
-		"
-	);
-}
-
-/*================================================================================
- [UTIL]
-=================================================================================*/
-stock UTIL_SetPlayerMapLightStyle(const iIndex, const szMapLightStyle[])	{
-	message_begin(MSG_ONE, SVC_LIGHTSTYLE, {0, 0, 0}, iIndex);
-	{
-		write_byte(0);
-		write_string(szMapLightStyle);
-	}
-	message_end();
-}
-
-stock UTIL_SetPlayerWeather(const iIndex, const iWeather)	{
-	switch(iIndex)
-	{
-		case 0:
-		{
-			message_begin(MSG_ALL, MsgId_ReceiveW);
-			{
-				write_byte(iWeather);
-			}
-			message_end();
-		}
-		default:
-		{
- 			message_begin(MSG_ONE, MsgId_ReceiveW, {0, 0, 0}, iIndex);
-			{
-				write_byte(iWeather);
-			}
-			message_end();
-		}
-	}
-}
-
-stock UTIL_RemovePlayerSlotWeapon(const iIndex, const InventorySlotType: iSlot)	{
-    new iItem = get_member(iIndex, m_rgpPlayerItems, iSlot), szWeaponClassName[20];
-
-    while(iItem > 0)
-    {
-        get_entvar(iItem, var_classname, szWeaponClassName, charsmax(szWeaponClassName));
-
-        rg_remove_item(iIndex, szWeaponClassName);
-
-        iItem = get_member(iItem, m_pNext);
-    }
-}
-
-stock UTIL_SetPlayerHideHud(const iIndex, const iHideHud)	{
-	message_begin(MSG_ONE, MsgId_HideWeapon, {0, 0, 0}, iIndex);
-	{
-		write_byte(iHideHud);
-	}
-	message_end();
-}
-
-stock UTIL_SetPlayerScreenFade(const iIndex, const iDuration, const iHoldTime, const iFlags, const iRed, const iGreen, const iBlue, const iAlpha)	{
-	message_begin(MSG_ONE, MsgId_ScreenFade, {0, 0, 0}, iIndex);
-	{
-		write_short(iDuration);
-		write_short(iHoldTime);
-		write_short(iFlags);
-		write_byte(iRed);
-		write_byte(iGreen);
-		write_byte(iBlue);
-		write_byte(iAlpha);
-	}
-	message_end();
-}
-
-stock UTIL_SetKvd(const iEntity, const szClssName[], const szKeyName[], const szValue[])	{
-	set_kvd(0, KV_ClassName, szClssName);
-	set_kvd(0, KV_KeyName, szKeyName);
-	set_kvd(0, KV_Value, szValue);
-	set_kvd(0, KV_fHandled, 0);
-
-	return dllfunc(DLLFunc_KeyValue, iEntity, 0);
-}
-
-stock UTIL_SetFileState(const szPlugin[], const szMessage[], any:...)	{
-	new szLog[256];
-	vformat(szLog, charsmax(szLog), szMessage, 3);
-	
-	new szDate[20];
-	get_time("error_%Y%m%d.log", szDate, charsmax(szDate));
-	
-	log_to_file(szDate, "[%s] %s", szPlugin, szLog);
-}
-
-stock UTIL_ParseHEXColor(const szValue[])	{
-	new iColor[Color];
-	
-	if(szValue[0] != '#' && strlen(szValue) != 7)
-	{
-		return iColor;
-	}
-
-	iColor[COLOR_RED] = UTIL_Parse16bit(szValue[1], szValue[2]);
-	iColor[COLOR_GREEN] = UTIL_Parse16bit(szValue[3], szValue[4]);
-	iColor[COLOR_BLUE] = UTIL_Parse16bit(szValue[5], szValue[6]);
-
-	return iColor;
-}
-
-stock UTIL_Parse16bit(const cSymbolA, const cSymbolB)	{
-	return UTIL_ParseHex(cSymbolA) * 16 + UTIL_ParseHex(cSymbolB);
-}
-
-stock UTIL_ParseHex(const cSymbol)	{
-	if('0' <= cSymbol && cSymbol <= '9')
-	{
-		return cSymbol - '0';
-	}
-	
-	if('a' <= cSymbol && cSymbol <= 'f')
-	{
-		return 10 + cSymbol - 'a';
-	}
-	
-	if('A' <= cSymbol && cSymbol <= 'F')
-	{
-		return 10 + cSymbol - 'A';
-	}
-
-	return 0;
-}
-
-stock UTIL_VecAdd(const Float: fVectorA[3], const Float: fVectorB[3], Float: fOut[3])	{
-	fOut[0] = fVectorA[0] + fVectorB[0];
-	fOut[1] = fVectorA[1] + fVectorB[1];
-	fOut[2] = fVectorA[2] + fVectorB[2];
-}
-
-stock UTIL_VecMulScalar(const Float: fVector[3], const Float: fScalar, Float: fOut[3])	{
-	fOut[0] = fVector[0] * fScalar;
-	fOut[1] = fVector[1] * fScalar;
-	fOut[2] = fVector[2] * fScalar;
+	g_infoZombieClass[iClass][CLASS_FACTOR_DAMAGE] = _: fFactorDamage;
+	g_infoZombieClass[iClass][CLASS_HP_REGENERATION] = _: fHealthRegeneration;
+	g_infoZombieClass[iClass][CLASS_HP_REGENERATION_MIN] = _: fHealthRegenerationMin;
 }

@@ -1,0 +1,9 @@
+[en]
+ZMB__TEXT_MSG_CT_WIN = Люди одержали победу!
+ZMB__TEXT_MSG_ROUND_DRAW = На этот раз ничья...
+ZMB__TEXT_MSG_TERRORIST_WIN = Зомби захватили весь мир!
+
+[ru]
+ZMB__TEXT_MSG_CT_WIN = Люди одержали победу!
+ZMB__TEXT_MSG_ROUND_DRAW = На этот раз ничья...
+ZMB__TEXT_MSG_TERRORIST_WIN = Зомби захватили весь мир!
