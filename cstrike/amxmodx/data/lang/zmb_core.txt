@@ -1,9 +1,27 @@
 [en]
-ZMB__TEXT_MSG_CT_WIN = Люди одержали победу!
-ZMB__TEXT_MSG_ROUND_DRAW = На этот раз ничья...
-ZMB__TEXT_MSG_TERRORIST_WIN = Зомби захватили весь мир!
+ZMB__HUD_MSG_CT_WIN = Люди одержали победу!
+ZMB__HUD_MSG_ROUND_DRAW = На этот раз ничья...
+ZMB__HUD_MSG_TERRORIST_WIN = Зомби захватили весь мир!
+
+ZMB__HUD_MSG_RESTART_GAME = Рестарт игры через [%d]
+
+ZMB__TEXT_MSG_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Вы инфицированы!
+ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Только спустя время выяснилось, что Вы инфицированы!
+
+ZMB__TEXT_MSG_MENU_EQUIPMENT_ON = \g[ZMB] \yМеню экипировки теперь \g^"активно^"\y.
+ZMB__TEXT_MSG_MENU_EQUIPMENT_OFF = \g[ZMB] \yМеню экипировки теперь \r^"неактивно^"\y.
 
 [ru]
-ZMB__TEXT_MSG_CT_WIN = Люди одержали победу!
-ZMB__TEXT_MSG_ROUND_DRAW = На этот раз ничья...
-ZMB__TEXT_MSG_TERRORIST_WIN = Зомби захватили весь мир!
+ZMB__HUD_MSG_CT_WIN = Люди одержали победу!
+ZMB__HUD_MSG_ROUND_DRAW = На этот раз ничья...
+ZMB__HUD_MSG_TERRORIST_WIN = Зомби захватили весь мир!
+
+ZMB__HUD_MSG_RESTART_GAME = Рестарт игры через [%d]
+
+ZMB__TEXT_MSG_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Вы инфицированы!
+ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Только спустя время выяснилось, что Вы инфицированы!
+
+ZMB__TEXT_MSG_MENU_EQUIPMENT_ON = \g[ZMB] \yМеню экипировки теперь \g^"активно^"\y.
+ZMB__TEXT_MSG_MENU_EQUIPMENT_OFF = \g[ZMB] \yМеню экипировки теперь \r^"неактивно^"\y.
+
+ZMB__TEXT_MSG_NEW_CLASS_AVAILABLE_NEXT_RESPAWN = \g[ZMB] \yКласс ^"%s^" будет доступен со следующего респавна.
