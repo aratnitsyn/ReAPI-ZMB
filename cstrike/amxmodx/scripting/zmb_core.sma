@@ -1,4 +1,5 @@
 #include <amxmodx>
+#include <engine>
 #include <fakemeta>
 #include <hamsandwich>
 #include <reapi>
@@ -184,6 +185,7 @@ public plugin_init()	{
 	Message_Init();
 	
 	ReAPI_Init();
+	Engine_Init();
 	FakeMeta_Init();
 	Hamsandwich_Init();
 
@@ -212,11 +214,13 @@ LoadMain()	{
 
 	switch(file_exists(szFileDir))
 	{
-		case 0:
+		case false:
 		{
-			UTIL_SetFileState("Core", "~ [ERROR] Конфигурационный файл ^"%s^" не найден.", szFileDir);
+			pause("d");
+			
+			UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE", szFileDir);
 		}
-		case 1:
+		case true:
 		{
 			ReadFile_Main(szFileDir);
 		}
@@ -304,7 +308,7 @@ ReadFile_Main(const szFileDir[])	{
 
 				if(!(TrieGetCell(tMainsBlocks, szBlock, iBlock)))
 				{
-					UTIL_SetFileState("Core", "~ [WARNING] Блок ^"%s^" в файле ^"%s^" не идентифицирован.", szBlock, szFileDir);
+					UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_BLOCK_NOT_IDENTIFIED", szBlock, szFileDir);
 				}
 				
 				continue;
@@ -352,7 +356,7 @@ ReadFile_Main(const szFileDir[])	{
 							}
 							default:
 							{
-								UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
+								UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_KEY_NOT_IDENTIFIED", szKey, szBlock);
 							}
 						}
 					}
@@ -409,7 +413,7 @@ ReadFile_Main(const szFileDir[])	{
 							}
 							default:
 							{
-								UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
+								UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_KEY_NOT_IDENTIFIED", szKey, szBlock);
 							}
 						}
 					}
@@ -505,11 +509,13 @@ LoadSounds()	{
 
 	switch(file_exists(szFileDir))
 	{
-		case 0:
+		case false:
 		{
-			UTIL_SetFileState("Core", "~ [ERROR] Конфигурационный файл ^"%s^" не найден.", szFileDir);
+			pause("d");
+			
+			UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE", szFileDir);
 		}
-		case 1:
+		case true:
 		{
 			ReadFile_Sounds(szFileDir);
 		}
@@ -600,7 +606,7 @@ ReadFile_Sounds(const szFileDir[])	{
 				
 				if(!(TrieGetCell(tSoundsBlocks, szBlock, iBlock)))
 				{
-					UTIL_SetFileState("Core", "~ [WARNING] Блок ^"%s^" в файле ^"%s^" не идентифицирован.", szBlock, szFileDir);
+					UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_BLOCK_NOT_IDENTIFIED", szBlock, szFileDir);
 				}
 				
 				continue;
@@ -620,7 +626,7 @@ ReadFile_Sounds(const szFileDir[])	{
 						{
 							case false:
 							{
-								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+								UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS", szPrecache);
 							}
 							case true:
 							{
@@ -643,7 +649,7 @@ ReadFile_Sounds(const szFileDir[])	{
 						{
 							case false:
 							{
-								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+								UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS", szPrecache);
 							}
 							case true:
 							{
@@ -666,7 +672,7 @@ ReadFile_Sounds(const szFileDir[])	{
 						{
 							case false:
 							{
-								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+								UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS", szPrecache);
 							}
 							case true:
 							{
@@ -689,7 +695,7 @@ ReadFile_Sounds(const szFileDir[])	{
 						{
 							case false:
 							{
-								UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+								UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS", szPrecache);
 							}
 							case true:
 							{
@@ -718,7 +724,7 @@ ReadFile_Sounds(const szFileDir[])	{
 							{
 								case false:
 								{
-									UTIL_SetFileState("Core", "~ [WARNING] Звуковой файл ^"%s^" не найден.", szPrecache);
+									UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS", szPrecache);
 								}
 								case true:
 								{
@@ -730,7 +736,7 @@ ReadFile_Sounds(const szFileDir[])	{
 						}
 						else
 						{
-							UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
+							UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_KEY_NOT_IDENTIFIED", szKey, szBlock);
 						}
 					}
 				}
@@ -772,13 +778,13 @@ LoadClasses()	{
 
 	switch(file_exists(szFileDir))
 	{
-		case 0:
+		case false:
 		{
 			pause("d");
 			
-			UTIL_SetFileState("Core", "~ [ERROR] Конфигурационный файл ^"%s^" не найден. Плагин остановил свою работу.", szFileDir);
+			UTIL_SetFileState("Core", "~%L", LANG_SERVER, "ZMB__STATE", szFileDir);
 		}
-		case 1:
+		case true:
 		{
 			ReadFile_Classes(szFileDir);
 		}
@@ -896,11 +902,11 @@ ReadFile_Classes(const szFileDir[])	{
 						{
 							switch(file_exists(szValue))
 							{
-								case 0:
+								case false:
 								{
-									UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szValue);
+									UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS", szValue);
 								}
-								case 1:
+								case true:
 								{
 									precache_model(szValue);
 									
@@ -914,11 +920,11 @@ ReadFile_Classes(const szFileDir[])	{
 							
 							switch(file_exists(szPrecache))
 							{
-								case 0:
+								case false:
 								{
-									UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szPrecache);
+									UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_FILE_NOT_EXISTS",szPrecache);
 								}
-								case 1:
+								case true:
 								{
 									precache_model(szPrecache);
 									
@@ -964,7 +970,7 @@ ReadFile_Classes(const szFileDir[])	{
 						}
 						default:
 						{
-							UTIL_SetFileState("Core", "~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.", szKey, szBlock);
+							UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE_KEY_NOT_IDENTIFIED", szKey, szBlock);
 						}
 					}
 				}
@@ -979,7 +985,7 @@ ReadFile_Classes(const szFileDir[])	{
 		{
 			pause("d");
 			
-			UTIL_SetFileState("Core", "~ [INFO] Файл классов ^"%s^" пуст. Плагин остановил свою работу.", szFileDir);
+			UTIL_SetFileState("Core", "%L", LANG_SERVER, "ZMB__STATE", szFileDir);
 		}
 	}
 }
@@ -1021,11 +1027,13 @@ Cvars_Cfg()	{
 	
 	switch(file_exists(szFileDir))
 	{
-		case 0:
+		case false:
 		{
-			UTIL_SetFileState("Core", "~ [WARNING] Файл ^"%s^" не найден.", szFileDir);
+			pause("d");
+			
+			UTIL_SetFileState("Core", "~%L", LANG_SERVER, "ZMB__STATE", szFileDir);
 		}
-		case 1:
+		case true:
 		{
 			server_cmd("exec %s", szFileDir);
 			
@@ -1061,11 +1069,6 @@ Cvars_Cfg()	{
 	{
 		g_tEquipment = TrieCreate();
 	}
-	
-	if(g_bCvar_BlockZombieFlashlight)
-	{
-		RegisterHookChain(RG_CBasePlayer_ImpulseCommands, "HC_CBasePlayer_ImpulseCommands", false);
-	}
 
 	if(g_szCvar_GameDescription[0])
 	{
@@ -1077,7 +1080,7 @@ Cvars_Cfg()	{
  [CLIENT]
 =================================================================================*/
 public client_putinserver(iIndex)	{
-	if(is_user_bot(iIndex) || is_user_hltv(iIndex))
+	if(is_user_hltv(iIndex))
 	{
 		return PLUGIN_HANDLED;
 	}
@@ -1588,18 +1591,23 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 	return HC_CONTINUE;
 }
 
-public HC_CBasePlayer_ImpulseCommands(const iIndex)	{
+/*================================================================================
+ [Engine]
+=================================================================================*/
+Engine_Init()	{
+	register_impulse(100, "EngineHook_Impulse");
+}
+
+public EngineHook_Impulse(const iIndex)	{
 	if(IsSetBit(gp_iBit[BIT_ZOMBIE], iIndex))
 	{
-		if(get_entvar(iIndex, var_impulse) == 100)
+		if(g_bCvar_BlockZombieFlashlight)
 		{
-			set_entvar(iIndex, var_impulse, 0);
-			
-			return HC_SUPERCEDE;
+			return PLUGIN_HANDLED;
 		}
 	}
 
-	return HC_CONTINUE;
+	return PLUGIN_CONTINUE;
 }
 
 /*================================================================================
@@ -1826,7 +1834,7 @@ public ClCmd_NightVision(const iIndex)	{
 public ClCmd_Equipment(const iIndex)	{
 	InvertBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex);
 
-	ChatPrint(iIndex, "%L", iIndex, IsSetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex) ? "ZMB__TEXT_MSG_MENU_EQUIPMENT_ON" : "ZMB__TEXT_MSG_MENU_EQUIPMENT_OFF");
+	ChatPrint(iIndex, "%L", iIndex, IsSetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex) ? "ZMB__TEXT_MSG_MENU_EQUIPMENT_ENABLE" : "ZMB__TEXT_MSG_MENU_EQUIPMENT_DISABLE");
 
 	return PLUGIN_HANDLED;
 }
@@ -1844,17 +1852,25 @@ MenuCmd_Init()	{
 
 ShowMenu_Main(const iIndex)	{
 	static szMenu[512]; new iBitKeys = MENU_KEY_1|MENU_KEY_3|MENU_KEY_5|MENU_KEY_0;
-	new iLen = formatex(szMenu, charsmax(szMenu), "\r[ZMB] \wГлавное меню^n^n");
+	new iLen = formatex(szMenu, charsmax(szMenu), "%L^n^n", iIndex, "ZMB__MAIN_MENU_TITLE");
 
-	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[1] \wВыбрать класс^n");
-	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \dМагазин^n");
-	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[3] \wМеню обмундирования \r[ \y%s \r]^n^n", IsSetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex) ? "ON" : "OFF");
+	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__MAIN_MENU_CHOISE_CLASS");
+	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__MAIN_MENU_SHOP");
+	
+	if(IsSetBit(gp_iBit[BIT_MENU_EQUIPMENT], iIndex))
+	{
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n", iIndex, "ZMB__MAIN_MENU_EQUIPMENT_ENABLE");
+	}
+	else
+	{
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n", iIndex, "ZMB__MAIN_MENU_EQUIPMENT_DISABLE");
+	}
 	
 	new TeamName: iTeam = get_member(iIndex, m_iTeam);
 
 	if(iTeam == TEAM_SPECTATOR || iTeam == TEAM_UNASSIGNED)
 	{
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[5] \wНачать играть^n^n^n^n^n^n");
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n^n^n^n^n", iIndex, "ZMB__MAIN_MENU_START_GAME");
 	}
 	else
 	{
@@ -1862,15 +1878,15 @@ ShowMenu_Main(const iIndex)	{
 		{
 			iBitKeys &= ~MENU_KEY_5;
 			
-			iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[5] \dЗайти за [ Спектаторов ]^n^n^n^n^n^n");
+			iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n^n^n^n^n", iIndex, "ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_DISABLE");
 		}
 		else
 		{
-			iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[5] \wЗайти за \r[ \yСпектаторов \r]^n^n^n^n^n^n");
+			iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n^n^n^n^n", iIndex, "ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_ENALBE");
 		}
 	}
 
-	formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[0] \wВыход");
+	formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L", iIndex, "ZMB__MENU_EXIT");
 	
 	return show_menu(iIndex, iBitKeys, szMenu, -1, "ShowMenu_Main");
 }
@@ -1941,14 +1957,14 @@ ShowMenu_ChooseClass(const iIndex, const iPos)	{
 	static iPagesNum; iPagesNum = (g_iZombieClasses / 8 + ((g_iZombieClasses % 8) ? 1 : 0));
 	
 	static szMenu[512]; new iBitKeys = MENU_KEY_0;
-	new iLen = formatex(szMenu, charsmax(szMenu), "\r[ZMB] \wКлассы зомби \d[%d|%d]^n^n", iPos + 1, iPagesNum);
+	new iLen = formatex(szMenu, charsmax(szMenu), "%L^n^n", iIndex, "ZMB__CHOOSE_CLASS_MENU_TITLE", iPos + 1, iPagesNum);
 
 	new iItem = 0, iCount;
 	for(iCount = iStart + 1; iCount < iEnd + 1; iCount++)
 	{
 		if(gp_iClass[iIndex] == iCount)
 		{
-			iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \d%s^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+			iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__CHOOSE_CLASS_MENU_CHOSEN", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
 		}
 		else
 		{
@@ -1956,7 +1972,7 @@ ShowMenu_ChooseClass(const iIndex, const iPos)	{
 			{
 				iBitKeys |= (1 << iItem);
 				
-				iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \d%s \r[ \yON SPAWN \r]^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+				iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__CHOOSE_CLASS_MENU_ON_SPAWN", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
 			}
 			else
 			{
@@ -1964,11 +1980,11 @@ ShowMenu_ChooseClass(const iIndex, const iPos)	{
 				{
 					iBitKeys |= (1 << iItem);
 					
-					iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+					iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__CHOOSE_CLASS_MENU_ITEM", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
 				}
 				else
 				{
-					iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \d%s \r[ \yNO ACCESS \r]^n", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
+					iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__CHOOSE_CLASS_MENU_NOT_ACCESS", ++iItem, g_infoZombieClass[iCount][CLASS_NAME]);
 				}
 			}
 		}
@@ -1983,11 +1999,11 @@ ShowMenu_ChooseClass(const iIndex, const iPos)	{
 	{
 		iBitKeys |= MENU_KEY_9;
 		
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r[9] \wДалее^n\r[0] \w%s", iPos ? "Назад" : "Выход");
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n%L^n%L", iIndex, "ZMB__MENU_NEXT", iIndex, iPos ? "ZMB__MENU_BACK" : "ZMB__MENU_EXIT");
 	}
 	else
 	{
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n^n\r[0] \w%s", iPos ? "Назад" : "Выход");
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n^n%L", iIndex, iPos ? "ZMB__MENU_BACK" : "ZMB__MENU_EXIT");
 	}
 	
 	return show_menu(iIndex, iBitKeys, szMenu, -1, "ShowMenu_ChooseClass");
@@ -2033,36 +2049,27 @@ public Handler_ChooseClass(const iIndex, const iKey)	{
 
 ShowMenu_Equipment(const iIndex)	{
 	static szMenu[512]; new iBitKeys = MENU_KEY_1|MENU_KEY_0;
-	new iLen = formatex(szMenu, charsmax(szMenu), "\r[ZMB] \wОбмундирование^n^n");
+	new iLen = formatex(szMenu, charsmax(szMenu), "%L^n^n", iIndex, "ZMB__EQUIPMENT_MENU_TITLE");
 	
-	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[1] \wНовое оружие^n");
+	iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__EQUIPMENT_MENU_NEW_WEAPON");
 	
 	static iPrimaryWeaponId; iPrimaryWeaponId = gp_iEquipment[iIndex][PLAYER_EQUIPMENT_PRIMARY];
 	static iSecondaryWeaponId; iSecondaryWeaponId = gp_iEquipment[iIndex][PLAYER_EQUIPMENT_SECONDARY];
 
 	if(!(iPrimaryWeaponId) || !(iSecondaryWeaponId))
 	{
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \dПредыдущие снаряжие^n^n");
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n", iIndex, "ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_DISABLE");
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n^n^n^n^n^n", iIndex, "ZMB__EQUIPMENT_MENU_SHOW_MENU_DISABLE");
 	}
 	else
 	{
-		iBitKeys |= MENU_KEY_2;
+		iBitKeys |= MENU_KEY_2|MENU_KEY_3;
 		
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[2] \wПредыдущие снаряжие \r[ \d%s | %s \r]^n^n", g_listPrimaryWeapons[iPrimaryWeaponId][WEAPON_NAME], g_listSecondaryWeapons[iSecondaryWeaponId][WEAPON_NAME]);
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n", iIndex, "ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_ENABLE", g_listPrimaryWeapons[iPrimaryWeaponId][WEAPON_NAME], g_listSecondaryWeapons[iSecondaryWeaponId][WEAPON_NAME]);
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n^n^n^n^n^n^n", iIndex, "ZMB__EQUIPMENT_MENU_SHOW_MENU_ENABLE");
 	}
-	
-	if(!(iPrimaryWeaponId) || !(iSecondaryWeaponId))
-	{
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[3] \dБольше не показывать меню^n^n^n^n^n^n^n");
-	}
-	else
-	{
-		iBitKeys |= MENU_KEY_3;
-		
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[3] \wБольше не показывать меню^n^n^n^n^n^n^n");
-	}
-	
-	formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[0] \wВыход");
+
+	formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L", iIndex, "ZMB__MENU_EXIT");
 
 	return show_menu(iIndex, iBitKeys, szMenu, -1, "ShowMenu_Equipment");
 }
@@ -2125,7 +2132,7 @@ ShowMenu_PrimaryWeapons(const iIndex, const iPos)	{
 	static iPagesNum; iPagesNum = (g_iPrimaryWeapons / 8 + ((g_iPrimaryWeapons % 8) ? 1 : 0));
 	
 	static szMenu[512]; new iBitKeys = MENU_KEY_0;
-	new iLen = formatex(szMenu, charsmax(szMenu), "\r[ZMB] \wОсновное оружие \d[%d|%d]^n^n", iPos + 1, iPagesNum);
+	new iLen = formatex(szMenu, charsmax(szMenu), "%L^n^n", iIndex, "ZMB__PRIMARY_WEAPONS_MENU_TITLE", iPos + 1, iPagesNum);
 
 	new iItem = 0, iCount;
 
@@ -2133,7 +2140,7 @@ ShowMenu_PrimaryWeapons(const iIndex, const iPos)	{
 	{
 		iBitKeys |= (1 << iItem);
 		
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_listPrimaryWeapons[iCount][WEAPON_NAME]);
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__PRIMARY_WEAPONS_MENU_ITEM", ++iItem, g_listPrimaryWeapons[iCount][WEAPON_NAME]);
 	}
 
 	for(iCount = iItem; iCount < 8; iCount++)
@@ -2145,11 +2152,11 @@ ShowMenu_PrimaryWeapons(const iIndex, const iPos)	{
 	{
 		iBitKeys |= MENU_KEY_9;
 		
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r[9] \wДалее^n\r[0] \w%s", iPos ? "Назад" : "Выход");
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n%L^n%L", iIndex, "ZMB__MENU_NEXT", iIndex, iPos ? "ZMB__MENU_BACK" : "ZMB__MENU_EXIT");
 	}
 	else
 	{
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n^n\r[0] \w%s", iPos ? "Назад" : "Выход");
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n^n%L", iIndex, iPos ? "ZMB__MENU_BACK" : "ZMB__MENU_EXIT");
 	}
 	
 	return show_menu(iIndex, iBitKeys, szMenu, -1, "ShowMenu_PrimaryWeapons");
@@ -2221,14 +2228,14 @@ ShowMenu_SecondaryWeapons(const iIndex, const iPos)	{
 	static iPagesNum; iPagesNum = (g_iSecondaryWeapons / 8 + ((g_iSecondaryWeapons % 8) ? 1 : 0));
 	
 	static szMenu[512]; new iBitKeys = MENU_KEY_0;
-	new iLen = formatex(szMenu, charsmax(szMenu), "\r[ZMB] \wЗапасное оружие \d[%d|%d]^n^n", iPos + 1, iPagesNum);
+	new iLen = formatex(szMenu, charsmax(szMenu), "%L^n^n", iIndex, "ZMB__SECONDARY_WEAPONS_MENU_TITLE", iPos + 1, iPagesNum);
 
 	new iItem = 0, iCount;
 	for(iCount = iStart + 1; iCount <= iEnd; iCount++)
 	{
 		iBitKeys |= (1 << iItem);
 		
-		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "\r[%d] \w%s^n", ++iItem, g_listSecondaryWeapons[iCount][WEAPON_NAME]);
+		iLen += formatex(szMenu[iLen], charsmax(szMenu) - iLen, "%L^n", iIndex, "ZMB__SECONDARY_WEAPONS_MENU_ITEM", ++iItem, g_listSecondaryWeapons[iCount][WEAPON_NAME]);
 	}
 	
 	for(iCount = iItem; iCount < 8; iCount++)
@@ -2240,11 +2247,11 @@ ShowMenu_SecondaryWeapons(const iIndex, const iPos)	{
 	{
 		iBitKeys |= MENU_KEY_9;
 		
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n\r[9] \wДалее^n\r[0] \w%s", iPos ? "Назад" : "Выход");
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n%L^n%L", iIndex, "ZMB__MENU_NEXT", iIndex, iPos ? "ZMB__MENU_BACK" : "ZMB__MENU_EXIT");
 	}
 	else
 	{
-		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n^n\r[0] \w%s", iPos ? "Назад" : "Выход");
+		formatex(szMenu[iLen], charsmax(szMenu) - iLen, "^n^n%L", iIndex, iPos ? "ZMB__MENU_BACK" : "ZMB__MENU_EXIT");
 	}
 	
 	return show_menu(iIndex, iBitKeys, szMenu, -1, "ShowMenu_SecondaryWeapons");
@@ -2343,12 +2350,12 @@ public taskPlayerHud(iIndex)	{
 		case 0:	/* [HUD] */
 		{
 			set_hudmessage(g_iCvar_HudColor[COLOR_RED], g_iCvar_HudColor[COLOR_GREEN], g_iCvar_HudColor[COLOR_BLUE], g_fCvar_HudPosition[POS_X], g_fCvar_HudPosition[POS_Y], 0, 0.0, 0.9, 0.15, 0.15, -1);
-			ShowSyncHudMsg(iIndex, g_iSyncPlayerHud, "Жизни [%.f] Класс ^"%s^"", fHealth, g_infoZombieClass[gp_iClass[iIndex]]);
+			ShowSyncHudMsg(iIndex, g_iSyncPlayerHud, "%L", iIndex, "ZMB__HUD_MSG_PLAYER_INFO", fHealth, g_infoZombieClass[gp_iClass[iIndex]]);
 		}
 		case 1:	/* [DHUD] */
 		{
 			set_dhudmessage(g_iCvar_HudColor[COLOR_RED], g_iCvar_HudColor[COLOR_GREEN], g_iCvar_HudColor[COLOR_BLUE], g_fCvar_HudPosition[POS_X], g_fCvar_HudPosition[POS_Y], 0, 0.0, 0.9, 0.15, 0.15);
-			show_dhudmessage(iIndex, "Жизни [%.f] Класс ^"%s^"", fHealth, g_infoZombieClass[gp_iClass[iIndex]]);
+			show_dhudmessage(iIndex, "%L", iIndex, "ZMB__HUD_MSG_PLAYER_INFO", fHealth, g_infoZombieClass[gp_iClass[iIndex]]);
 		}
 	}
 }

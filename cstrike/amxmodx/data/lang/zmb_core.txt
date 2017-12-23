@@ -1,27 +1,149 @@
 [en]
-ZMB__HUD_MSG_CT_WIN = Люди одержали победу!
-ZMB__HUD_MSG_ROUND_DRAW = На этот раз ничья...
-ZMB__HUD_MSG_TERRORIST_WIN = Зомби захватили весь мир!
+ZMB__HUD_MSG_CT_WIN = Survivors win!
+ZMB__HUD_MSG_ROUND_DRAW = This time draw...
+ZMB__HUD_MSG_TERRORIST_WIN = Zombies win!
+ZMB__HUD_MSG_RESTART_GAME = Restart game [%d]
+ZMB__HUD_MSG_PLAYER_INFO = Health [%.f] Class ^"%s^"
 
-ZMB__HUD_MSG_RESTART_GAME = Рестарт игры через [%d]
+ZMB__TEXT_MSG_YOU_INFECTED = \g[ZMB] \yBIOSCANNING: You are infected!
+ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED = \g[ZMB] \yBIOSCANNING: Only after a while it turned out that you are infected!
+ZMB__TEXT_MSG_MENU_EQUIPMENT_ENABLE = \g[ZMB] \yMenu equipment \g^"enable^"\y.
+ZMB__TEXT_MSG_MENU_EQUIPMENT_DISABLE = \g[ZMB] \yMenu equipment \r^"disable^"\y.
+ZMB__TEXT_MSG_NEW_CLASS_AVAILABLE_NEXT_RESPAWN = \g[ZMB] \yСlass ^"%s^" will be available from the next respawn.
 
-ZMB__TEXT_MSG_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Вы инфицированы!
-ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Только спустя время выяснилось, что Вы инфицированы!
+ZMB__MAIN_MENU_TITLE = \r[ZMB] \wMain menu
+ZMB__MAIN_MENU_CHOISE_CLASS = \r[1] \wChoice class
+ZMB__MAIN_MENU_SHOP = \r[2] \dShop
+ZMB__MAIN_MENU_EQUIPMENT_ENABLE = \r[3] \wEquipments \r[ \yON \r]
+ZMB__MAIN_MENU_EQUIPMENT_DISABLE = \r[3] \wEquipments \r[ \yOFF \r]
+ZMB__MAIN_MENU_START_GAME = \r[5] \wStart game
+ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_ENALBE = \r[5] \wJoin to \r[ \ySpectator \r]
+ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_DISABLE = \r[5] \dJoin to [ Spectator ]
 
-ZMB__TEXT_MSG_MENU_EQUIPMENT_ON = \g[ZMB] \yМеню экипировки теперь \g^"активно^"\y.
-ZMB__TEXT_MSG_MENU_EQUIPMENT_OFF = \g[ZMB] \yМеню экипировки теперь \r^"неактивно^"\y.
+ZMB__CHOOSE_CLASS_MENU_TITLE = \r[ZMB] \wClasses zombie \d[%d|%d]
+ZMB__CHOOSE_CLASS_MENU_CHOSEN = \r[%d] \d%s
+ZMB__CHOOSE_CLASS_MENU_ON_SPAWN = \r[%d] \d%s \r[ \yON SPAWN \r]
+ZMB__CHOOSE_CLASS_MENU_NOT_ACCESS = \r[%d] \d%s \r[ \yNO ACCESS \r]
+ZMB__CHOOSE_CLASS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__EQUIPMENT_MENU_TITLE = \r[ZMB] \wEquipments
+ZMB__EQUIPMENT_MENU_NEW_WEAPON = \r[1] \wNew weapons
+ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_ENABLE = \r[2] \wPrevious weapons \r[ \d%s | %s \r]
+ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_DISABLE = \r[2] \dPrevious weapons
+ZMB__EQUIPMENT_MENU_SHOW_MENU_ENABLE = \r[3] \wDon't show menu again
+ZMB__EQUIPMENT_MENU_SHOW_MENU_DISABLE = \r[3] \dDon't show menu again
+
+ZMB__PRIMARY_WEAPONS_MENU_TITLE = \r[ZMB] \wPrimary weapons \d[%d|%d]
+ZMB__PRIMARY_WEAPONS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__SECONDARY_WEAPONS_MENU_TITLE = \r[ZMB] \wSecondary weapons \d[%d|%d]
+ZMB__SECONDARY_WEAPONS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__MENU_NEXT = \r[9] \wNext
+ZMB__MENU_BACK = \r[0] \wBack
+ZMB__MENU_EXIT = \r[0] \wExit
+
+ZMB__STATE = ~ [ERROR] The configuration file ^"%s^" is empty or not found. The plugin is paused.
+ZMB__STATE_KEY_NOT_IDENTIFIED = ~ [WARNING] The key ^"%s^" from the block ^"%s^" is not identified.
+ZMB__STATE_BLOCK_NOT_IDENTIFIED = ~ [WARNING] The block ^"%s^" in the file ^"%s^" is not identified.
+ZMB__STATE_FILE_NOT_EXISTS = ~ [WARNING] The file ^"%s^" not found.
+
+[tr]
+ZMB__HUD_MSG_CT_WIN = Insanlar Kazandi!
+ZMB__HUD_MSG_ROUND_DRAW = Round Berabere...
+ZMB__HUD_MSG_TERRORIST_WIN = Zombiler Kazandi!
+ZMB__HUD_MSG_RESTART_GAME = [%d] saniye sonra oyun yeniden baslayacak.
+ZMB__HUD_MSG_PLAYER_INFO = Can [%.f] Sinif ^"%s^"
+
+ZMB__TEXT_MSG_YOU_INFECTED = \g[ZMB] \yBioTarama: Hastalik Kapmissiniz.
+ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED = \g[ZMB] \yBioTarama: Ilerleyen zamanlarda hastalik yayilabilir.
+ZMB__TEXT_MSG_MENU_EQUIPMENT_ENABLE = \g[ZMB] \ySilah menusu \g^"etkin^"\y.
+ZMB__TEXT_MSG_MENU_EQUIPMENT_DISABLE = \g[ZMB] \ySilah menusu artik \r^"etkin degil^"\y.
+ZMB__TEXT_MSG_NEW_CLASS_AVAILABLE_NEXT_RESPAWN = \g[ZMB] \y^"%s^" sinifini yeniden dogdugunuzda kullanabileceksiniz.
+
+ZMB__MAIN_MENU_TITLE = \r[ZMB] \wAna Menu
+ZMB__MAIN_MENU_CHOISE_CLASS = \r[1] \wSinifini Sec
+ZMB__MAIN_MENU_SHOP = \r[2] \dMagaza
+ZMB__MAIN_MENU_EQUIPMENT_ENABLE = \r[3] \wSilah Menusu \r[ \yACIK\r]
+ZMB__MAIN_MENU_EQUIPMENT_DISABLE = \r[3] \wSilah Menusu \r[ \yKAPALI \r]
+ZMB__MAIN_MENU_START_GAME = \r[5] \wOyuna Girin
+ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_ENALBE = \r[5] \wTakimina Gec \r[ \yACIK \r]
+ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_DISABLE = \r[5] \dTakimina Gec [ KAPALI ]
+
+ZMB__CHOOSE_CLASS_MENU_TITLE = \r[ZMB] \wZombi Sinifi Secimi \d[%d|%d]
+ZMB__CHOOSE_CLASS_MENU_CHOSEN = \r[%d] \d%s
+ZMB__CHOOSE_CLASS_MENU_ON_SPAWN = \r[%d] \d%s \r[ \yON SPAWN \r]
+ZMB__CHOOSE_CLASS_MENU_NOT_ACCESS = \r[%d] \d%s \r[ \yNO ACCESS \r]
+ZMB__CHOOSE_CLASS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__EQUIPMENT_MENU_TITLE = \r[ZMB] \wEnvanter Secimi
+ZMB__EQUIPMENT_MENU_NEW_WEAPON = \r[1] \wYeni Silahlar
+ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_ENABLE = \r[2] \wOnceki Ekipman \r[ \d%s | %s \r]
+ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_DISABLE = \r[2] \dOnceki Ekipman
+ZMB__EQUIPMENT_MENU_SHOW_MENU_ENABLE = \r[3] \wMenuyu bir daha gosterme
+ZMB__EQUIPMENT_MENU_SHOW_MENU_DISABLE = \r[3] \dMenuyu bir daha gosterme
+
+ZMB__PRIMARY_WEAPONS_MENU_TITLE = \r[ZMB] \wBirincil Silah Secimi \d[%d|%d]
+ZMB__PRIMARY_WEAPONS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__SECONDARY_WEAPONS_MENU_TITLE = \r[ZMB] \wIkincil Silah Secimi \d[%d|%d]
+ZMB__SECONDARY_WEAPONS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__MENU_NEXT = \r[8] \wDaha ileri
+ZMB__MENU_BACK = \r[9] \wGeri Gel
+ZMB__MENU_EXIT = \r[0] \wCikis
+
+ZMB__STATE = ~ [ERROR] The configuration file ^"%s^" is empty or not found. The plugin is paused.
+ZMB__STATE_KEY_NOT_IDENTIFIED = ~ [WARNING] The key ^"%s^" from the block ^"%s^" is not identified.
+ZMB__STATE_BLOCK_NOT_IDENTIFIED = ~ [WARNING] The block ^"%s^" in the file ^"%s^" is not identified.
+ZMB__STATE_FILE_NOT_EXISTS = ~ [WARNING] The file ^"%s^" not found.
 
 [ru]
 ZMB__HUD_MSG_CT_WIN = Люди одержали победу!
 ZMB__HUD_MSG_ROUND_DRAW = На этот раз ничья...
 ZMB__HUD_MSG_TERRORIST_WIN = Зомби захватили весь мир!
-
 ZMB__HUD_MSG_RESTART_GAME = Рестарт игры через [%d]
+ZMB__HUD_MSG_PLAYER_INFO = Жизни [%.f] Класс ^"%s^"
 
 ZMB__TEXT_MSG_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Вы инфицированы!
 ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED = \g[ZMB] \yБИОСКАНЕР: Только спустя время выяснилось, что Вы инфицированы!
-
-ZMB__TEXT_MSG_MENU_EQUIPMENT_ON = \g[ZMB] \yМеню экипировки теперь \g^"активно^"\y.
-ZMB__TEXT_MSG_MENU_EQUIPMENT_OFF = \g[ZMB] \yМеню экипировки теперь \r^"неактивно^"\y.
-
+ZMB__TEXT_MSG_MENU_EQUIPMENT_ENABLE = \g[ZMB] \yМеню экипировки теперь \g^"активно^"\y.
+ZMB__TEXT_MSG_MENU_EQUIPMENT_DISABLE = \g[ZMB] \yМеню экипировки теперь \r^"неактивно^"\y.
 ZMB__TEXT_MSG_NEW_CLASS_AVAILABLE_NEXT_RESPAWN = \g[ZMB] \yКласс ^"%s^" будет доступен со следующего респавна.
+
+ZMB__MAIN_MENU_TITLE = \r[ZMB] \wГлавное меню
+ZMB__MAIN_MENU_CHOISE_CLASS = \r[1] \wВыбрать класс
+ZMB__MAIN_MENU_SHOP = \r[2] \dМагазин
+ZMB__MAIN_MENU_EQUIPMENT_ENABLE = \r[3] \wМеню экипировки \r[ \yВКЛ\r]
+ZMB__MAIN_MENU_EQUIPMENT_DISABLE = \r[3] \wМеню экипировки \r[ \yВЫКЛ \r]
+ZMB__MAIN_MENU_START_GAME = \r[5] \wНачать играть
+ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_ENALBE = \r[5] \wЗайти за \r[ \yСпектаторов \r]
+ZMB__MAIN_MENU_JOIN_TO_SPECTATOR_DISABLE = \r[5] \dЗайти за [ Спектаторов ]
+
+ZMB__CHOOSE_CLASS_MENU_TITLE = \r[ZMB] \wКлассы зомби \d[%d|%d]
+ZMB__CHOOSE_CLASS_MENU_CHOSEN = \r[%d] \d%s
+ZMB__CHOOSE_CLASS_MENU_ON_SPAWN = \r[%d] \d%s \r[ \yON SPAWN \r]
+ZMB__CHOOSE_CLASS_MENU_NOT_ACCESS = \r[%d] \d%s \r[ \yNO ACCESS \r]
+ZMB__CHOOSE_CLASS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__EQUIPMENT_MENU_TITLE = \r[ZMB] \wМеню экипировки
+ZMB__EQUIPMENT_MENU_NEW_WEAPON = \r[1] \wНовое снаряжение
+ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_ENABLE = \r[2] \wПредыдущее снаряжение \r[ \d%s | %s \r]
+ZMB__EQUIPMENT_MENU_PREVIOUS_WEAPON_DISABLE = \r[2] \dПредыдущее снаряжение
+ZMB__EQUIPMENT_MENU_SHOW_MENU_ENABLE = \r[3] \wБольше не показывать меню
+ZMB__EQUIPMENT_MENU_SHOW_MENU_DISABLE = \r[3] \dБольше не показывать меню
+
+ZMB__PRIMARY_WEAPONS_MENU_TITLE = \r[ZMB] \wОсновное оружие \d[%d|%d]
+ZMB__PRIMARY_WEAPONS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__SECONDARY_WEAPONS_MENU_TITLE = \r[ZMB] \wЗапасное оружие \d[%d|%d]
+ZMB__SECONDARY_WEAPONS_MENU_ITEM = \r[%d] \w%s
+
+ZMB__MENU_NEXT = \r[9] \wВперед
+ZMB__MENU_BACK = \r[0] \wНазад
+ZMB__MENU_EXIT = \r[0] \wВыход
+
+ZMB__STATE = ~ [ERROR] Конфигурационный файл ^"%s^" пуст или не найден. Плагин остановил свою работу.
+ZMB__STATE_KEY_NOT_IDENTIFIED = ~ [WARNING] Ключ ^"%s^" из блока ^"%s^" не идентифицирован.
+ZMB__STATE_BLOCK_NOT_IDENTIFIED = ~ [WARNING] Блок ^"%s^" в файле ^"%s^" не идентифицирован.
+ZMB__STATE_FILE_NOT_EXISTS = ~ [WARNING] Файл ^"%s^" не найден.
