@@ -14,7 +14,7 @@
 #pragma semicolon                    1
 
 #define PLUGIN_NAME                  "[ZMB] Core"
-#define PLUGIN_VERS                  "0.0.9"
+#define PLUGIN_VERS                  "0.1.1"
 #define PLUGIN_AUTH                  "81x08"
 
 #define MAX_PLAYERS                  32
@@ -55,9 +55,11 @@ enum infoClass	{
 	bool: CLASS_FOOTSTEPS,
 	
 	Float: CLASS_KNOCKBACK,
+	Float: CLASS_HEDEFENCE,
 	Float: CLASS_FACTOR_DAMAGE,
 	Float: CLASS_HP_REGENERATION,
-	Float: CLASS_HP_REGENERATION_MIN
+	Float: CLASS_HP_REGENERATION_MIN,
+	Float: CLASS_HP_REGENERATION_DELAY
 };
 
 enum listWeaponInfo	{
@@ -128,6 +130,8 @@ new	g_iCvar_HudType,
 
 new	bool: g_bCvar_SaveEquipment,
 	bool: g_bCvar_BlockZombieFlashlight,
+	bool: g_bCvar_GetZombieDamageFalling,
+	bool: g_bCvar_IfLastZombieDisconnect,
 	bool: g_bCvar_StateKnockbackSitZombie;
 
 new	Float: g_fCvar_TimeInfections,
@@ -170,6 +174,10 @@ new	Array: g_aSoundsSurvirvorWin,
 /*================================================================================
  [PLUGIN]
 =================================================================================*/
+public plugin_natives()	{
+	RegisterNatives();
+}
+
 public plugin_precache()	{
 	LoadMain();
 	LoadSounds();
@@ -201,6 +209,85 @@ public plugin_init()	{
 
 public plugin_cfg()	{
 	Cvars_Cfg();
+}
+
+/*================================================================================
+ [NATIVES]
+=================================================================================*/
+RegisterNatives()	{
+	register_native("get_alive_humans", "native_get_alive_humans", 1);
+	register_native("get_alive_zombies", "native_get_alive_zombies", 1);
+	
+	register_native("is_user_human", "native_is_user_human", 1);
+	register_native("is_user_zombie", "native_is_user_zombie", 1);
+	register_native("is_user_infected", "native_is_user_infected", 1);
+	
+	register_native("is_last_human", "native_is_last_human", 1);
+	register_native("is_last_zombie", "native_is_last_zombie", 1);
+	register_native("get_last_human", "native_get_last_human", 1);
+	register_native("get_last_zombie", "native_get_last_zombie", 1);
+}
+
+public native_get_alive_humans()	{
+	return g_iAliveHumans;
+}
+
+public native_get_alive_zombies()	{
+	return g_iAliveZombies;
+}
+
+public native_is_user_human(const iIndex)	{
+	return IsSetBit(gp_iBit[BIT_HUMAN], iIndex);
+}
+
+public native_is_user_zombie(const iIndex)	{
+	return IsSetBit(gp_iBit[BIT_ZOMBIE], iIndex);
+}
+
+public native_is_user_infected(const iIndex)	{
+	return IsSetBit(gp_iBit[BIT_INFECTED], iIndex);
+}
+
+public native_is_last_human(const iIndex)	{
+	return (g_iAliveHumans == 1 && IsSetBit(gp_iBit[BIT_HUMAN], iIndex));
+}
+
+public native_is_last_zombie(const iIndex)	{
+	return (g_iAliveZombies == 1 && IsSetBit(gp_iBit[BIT_ZOMBIE], iIndex));
+}
+
+public native_get_last_human()	{
+	if(g_iAliveHumans != 1)
+	{
+		return 0;
+	}
+	
+	for(new iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
+	{
+		if(IsSetBit(gp_iBit[BIT_HUMAN], iIndex))
+		{
+			return iIndex;
+		}
+	}
+	
+	return 0;
+}
+
+public native_get_last_zombie()	{
+	if(g_iAliveZombies != 1)
+	{
+		return 0;
+	}
+	
+	for(new iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
+	{
+		if(IsSetBit(gp_iBit[BIT_ZOMBIE], iIndex))
+		{
+			return iIndex;
+		}
+	}
+	
+	return 0;
 }
 
 /*================================================================================
@@ -810,9 +897,11 @@ ReadFile_Classes(const szFileDir[])	{
 		#define CLASS_KEY__GRAVITY                   6
 		#define CLASS_KEY__FOOTSTEPS                 7
 		#define CLASS_KEY__KNOCKBACK                 8
-		#define CLASS_KEY__FACTOR_DAMAGE             9
-		#define CLASS_KEY__HP_REGENERATION_          10
-		#define CLASS_KEY__HP_REGENERATION_MIN       11
+		#define CLASS_KEY__HEDEFENCE                 9
+		#define CLASS_KEY__FACTOR_DAMAGE             10
+		#define CLASS_KEY__HP_REGENERATION_          11
+		#define CLASS_KEY__HP_REGENERATION_MIN       12
+		#define CLASS_KEY__HP_REGENERATION_DELAY     13
 
 		new Trie: tClassesKeys = TrieCreate();
 		
@@ -825,9 +914,11 @@ ReadFile_Classes(const szFileDir[])	{
 			"gravity",
 			"footsteps",
 			"knockback",
+			"hedefence",
 			"factor_damage",
 			"regeneration_hp",
-			"regeneration_hp_min"
+			"regeneration_hp_min",
+			"regeneration_delay"
 		};
 		
 		for(new iCount = 0, iSize = sizeof(szClassesKeys); iCount < iSize; iCount++)
@@ -866,9 +957,11 @@ ReadFile_Classes(const szFileDir[])	{
 							infoZombieClass[CLASS_GRAVITY],
 							infoZombieClass[CLASS_FOOTSTEPS],
 							infoZombieClass[CLASS_KNOCKBACK],
+							infoZombieClass[CLASS_HEDEFENCE],
 							infoZombieClass[CLASS_FACTOR_DAMAGE],
 							infoZombieClass[CLASS_HP_REGENERATION],
-							infoZombieClass[CLASS_HP_REGENERATION_MIN]
+							infoZombieClass[CLASS_HP_REGENERATION_MIN],
+							infoZombieClass[CLASS_HP_REGENERATION_DELAY]
 						);
 					}
 					
@@ -956,6 +1049,10 @@ ReadFile_Classes(const szFileDir[])	{
 						{
 							infoZombieClass[CLASS_KNOCKBACK] = _: str_to_float(szValue);
 						}
+						case CLASS_KEY__HEDEFENCE:
+						{
+							infoZombieClass[CLASS_HEDEFENCE] = _: str_to_float(szValue);
+						}
 						case CLASS_KEY__FACTOR_DAMAGE:
 						{
 							infoZombieClass[CLASS_FACTOR_DAMAGE] = _: str_to_float(szValue);
@@ -967,6 +1064,10 @@ ReadFile_Classes(const szFileDir[])	{
 						case CLASS_KEY__HP_REGENERATION_MIN:
 						{
 							infoZombieClass[CLASS_HP_REGENERATION_MIN] = _: str_to_float(szValue);
+						}
+						case CLASS_KEY__HP_REGENERATION_DELAY:
+						{
+							infoZombieClass[CLASS_HP_REGENERATION_DELAY] = _: str_to_float(szValue);
 						}
 						default:
 						{
@@ -1005,6 +1106,8 @@ Cvars_Cfg()	{
 		iCvarId_TimeRestartGame,
 		iCvarId_MaxDistanceKnockback,
 		iCvarId_BlockZombieFlashlight,
+		iCvarId_GetZombieDamageFalling,
+		iCvarId_IfLastZombieDisconnect,
 		iCvarId_StateKnockbackSitZombie;
 
 	iCvarId_HudType                 = register_cvar("zmb_hud_type",                     "0");
@@ -1018,6 +1121,8 @@ Cvars_Cfg()	{
 	iCvarId_TimeRestartGame         = register_cvar("zmb_time_restart_game",            "15");
 	iCvarId_MaxDistanceKnockback    = register_cvar("zmb_min_distance_knockback",       "500");
 	iCvarId_BlockZombieFlashlight   = register_cvar("zmb_block_zombie_flashlight",      "1");
+	iCvarId_GetZombieDamageFalling  = register_cvar("zmb_zombie_get_damage_falling",    "1");
+	iCvarId_IfLastZombieDisconnect = register_cvar("zmb_if_last_zombie_disconnect",    "1");
 	iCvarId_StateKnockbackSitZombie = register_cvar("zmb_state_knockback_sit_zombie",   "1");
 
  	new szFileDir[128];
@@ -1051,6 +1156,8 @@ Cvars_Cfg()	{
 	
 	g_bCvar_SaveEquipment           = bool: get_pcvar_num(iCvarId_SaveEquipment);
 	g_bCvar_BlockZombieFlashlight   = bool: get_pcvar_num(iCvarId_BlockZombieFlashlight);
+	g_bCvar_GetZombieDamageFalling  = bool: get_pcvar_num(iCvarId_GetZombieDamageFalling);
+	g_bCvar_IfLastZombieDisconnect = bool: get_pcvar_num(iCvarId_IfLastZombieDisconnect);
 	g_bCvar_StateKnockbackSitZombie = bool: get_pcvar_num(iCvarId_StateKnockbackSitZombie);
 	
 	new szPosition[Positon][8], szCvarPosition[16];
@@ -1134,7 +1241,14 @@ public client_disconnect(iIndex)	{
 		{
 			if(g_iAliveZombies == 0)
 			{
-				if(g_iAliveHumans > 1)
+				if(g_iAliveHumans == 1)
+				{
+					if(g_bCvar_IfLastZombieDisconnect)
+					{
+						rg_round_end(1.0, WINSTATUS_CTS, ROUND_CTS_WIN);
+					}
+				}
+				else if(g_iAliveHumans > 1)
 				{
 					setRandomPlayerZombie();
 				}
@@ -1463,14 +1577,29 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 	return HC_CONTINUE;
 }
 
-public HC_CBasePlayer_TakeDamage_Pre(const iVictim, const iWeaponId, const iAttacker, const Float: fDamage, const iType)	{
+public HC_CBasePlayer_TakeDamage_Pre(const iVictim, const iWeaponId, const iAttacker, Float: fDamage, const bitsDamageType)	{
 	if(IsSetBit(gp_iBit[BIT_ZOMBIE], iVictim))
 	{
-		if(iType == DMG_FALL)
+		switch(bitsDamageType)
 		{
-			SetHookChainReturn(ATYPE_INTEGER, 0);
-			
-			return HC_SUPERCEDE;
+			case DMG_FALL:
+			{
+				if(g_bCvar_GetZombieDamageFalling)
+				{
+					SetHookChainReturn(ATYPE_INTEGER, 0);
+					
+					return HC_SUPERCEDE;
+				}
+			}
+			case DMG_GRENADE:
+			{
+				if(g_infoZombieClass[gp_iClass[iVictim]][CLASS_HEDEFENCE])
+				{
+					fDamage *= g_infoZombieClass[gp_iClass[iVictim]][CLASS_HEDEFENCE];
+					
+					SetHookChainArg(3, ATYPE_FLOAT, fDamage);
+				}
+			}
 		}
 	}
 	
@@ -1488,7 +1617,7 @@ public HC_CBasePlayer_TakeDamage_Post(const iVictim)	{
 
 				if(fHealth > 0.0 && fHealth < g_infoZombieClass[gp_iClass[iVictim]][CLASS_HP_REGENERATION_MIN])
 				{
-					set_task(1.0, "taskZombieHealthRegeneration", iVictim + TASK_ID_ZOMBIE_HP_REGENERATION, .flags = "b");
+					set_task(g_infoZombieClass[gp_iClass[iVictim]][CLASS_HP_REGENERATION_DELAY], "taskZombieHealthRegeneration", TASK_ID_ZOMBIE_HP_REGENERATION + iVictim, .flags = "b");
 				}
 			}
 		}
@@ -1502,7 +1631,7 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 		
 		return HC_SUPERCEDE;
 	}
-	
+
 	if(IsSetBit(gp_iBit[BIT_ZOMBIE], iAttacker) && IsSetBit(gp_iBit[BIT_HUMAN], iVictim))
 	{
 		static Float: fArmor; fArmor = get_entvar(iVictim, var_armorvalue);
@@ -2295,10 +2424,8 @@ public taskInfect()	{
 	{
 		EnableHamForward(g_iHamFwd_Entity_Block[iCount]);
 	}
-	
-	new iIndex;
-	
-	for(iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
+
+	for(new iIndex = 1; iIndex <= g_iMaxPlayers; iIndex++)
 	{
 		if(IsSetBit(gp_iBit[BIT_INFECTED], iIndex))
 		{
@@ -2519,14 +2646,7 @@ stock setRandomPlayerInfected(const bool: bAftedInfected = false)	{
 				iNumberInfected--;
 				g_iNumberInfected++;
 				
-				if(bAftedInfected)
-				{
-					ChatPrint(iTarget, "%L", iTarget, "ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED");
-				}
-				else
-				{
-					ChatPrint(iTarget, "%L", iTarget, "ZMB__TEXT_MSG_YOU_INFECTED");
-				}
+				ChatPrint(iTarget, "%L", iTarget, bAftedInfected ? "ZMB__TEXT_MSG_AFTER_SOME_TIME_YOU_INFECTED" : "ZMB__TEXT_MSG_YOU_INFECTED");
 			}
 		}
 	}
@@ -2600,7 +2720,7 @@ stock givePlayerGrenades(const iIndex)	{
 	}
 }
 
-stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[], const iAccessFlags, const Float: fSpeed, const Float: fHealth, const Float: fGravity, const bool: bFootSteps, const Float: fKnockback, const Float: fFactorDamage, const Float: fHealthRegeneration, const Float: fHealthRegenerationMin)	{
+stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[], const iAccessFlags, const Float: fSpeed, const Float: fHealth, const Float: fGravity, const bool: bFootSteps, const Float: fKnockback, const Float: fHeDefence, const Float: fFactorDamage, const Float: fHealthRegeneration, const Float: fHealthRegenerationMin, const Float: fHealthRegenerationDelay)	{
 	new iClass = g_iZombieClasses += 1;
 
 	copy(g_infoZombieClass[iClass][CLASS_NAME], 64, szName);
@@ -2613,7 +2733,9 @@ stock addZombieClass(const szName[], const szKnifeModel[], const szPlayerModel[]
 	g_infoZombieClass[iClass][CLASS_GRAVITY] = _: fGravity;
 	g_infoZombieClass[iClass][CLASS_FOOTSTEPS] = bool: bFootSteps;
 	g_infoZombieClass[iClass][CLASS_KNOCKBACK] = _: fKnockback;
+	g_infoZombieClass[iClass][CLASS_HEDEFENCE] = _: fHeDefence;
 	g_infoZombieClass[iClass][CLASS_FACTOR_DAMAGE] = _: fFactorDamage;
 	g_infoZombieClass[iClass][CLASS_HP_REGENERATION] = _: fHealthRegeneration;
 	g_infoZombieClass[iClass][CLASS_HP_REGENERATION_MIN] = _: fHealthRegenerationMin;
+	g_infoZombieClass[iClass][CLASS_HP_REGENERATION_DELAY] = _: fHealthRegenerationDelay;
 }

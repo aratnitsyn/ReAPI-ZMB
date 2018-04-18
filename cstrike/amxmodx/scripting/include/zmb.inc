@@ -82,6 +82,79 @@
 		return 0;
 	}
 	
+	/*
+	*	Функция возвращает количество живых людей.
+	*
+	*	@return int
+	*/
+	native get_alive_humans();
+	
+	/*
+	*	Функция возвращает количество живых зомби.
+	*
+	*	@return int
+	*/
+	native get_alive_zombies();
+	
+	/*
+	*	Проверка является ли игрок человеком.
+	*
+	*	@param const iIndex
+	*
+	*	@return [true / false]
+	*/
+	native is_user_human(const iIndex);
+
+	/*
+	*	Проверка является ли игрок зомби.
+	*
+	*	@param const iIndex
+	*
+	*	@return [true / false]
+	*/
+	native is_user_zombie(const iIndex);
+	
+	/*
+	*	Проверка является ли игрок инфецированным.
+	*
+	*	@param const iIndex
+	*
+	*	@return [true / false]
+	*/
+	native is_user_infected(const iIndex);
+	
+	/*
+	*	Проверка является ли игрок последним выжившим.
+	*
+	*	@param const iIndex
+	*
+	*	@return [true / false]
+	*/
+	native is_last_human(const iIndex);
+	
+	/*
+	*	Проверка является ли игрок последним зомби.
+	*
+	*	@param const iIndex
+	*
+	*	@return [true / false]
+	*/
+	native is_last_zombie(const iIndex);
+	
+	/*
+	*	Возвращает индекс последнего выжившего.
+	*
+	*	@return index
+	*/
+	native get_last_human();
+	
+	/*
+	*	Возвращает индекс последнего зомби.
+	*
+	*	@return index
+	*/
+	native get_last_zombie();
+	
 #endif
 
 /**----------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
