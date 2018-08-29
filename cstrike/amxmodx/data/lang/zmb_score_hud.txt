@@ -1,0 +1,11 @@
+[en]
+ZMB__HUMANS = Humans
+ZMB__ZOMBIES = Zombies
+
+[tr]
+ZMB__HUMANS = Insanlar
+ZMB__ZOMBIES = Zombiler
+
+[ru]
+ZMB__HUMANS = Люди
+ZMB__ZOMBIES = Зомби

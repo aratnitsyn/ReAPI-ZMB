@@ -14,7 +14,7 @@
 #pragma semicolon                    1
 
 #define PLUGIN_NAME                  "[ZMB] Core"
-#define PLUGIN_VERS                  "0.1.1"
+#define PLUGIN_VERS                  "0.1.2"
 #define PLUGIN_AUTH                  "81x08"
 
 #define MAX_PLAYERS                  32
@@ -126,12 +126,13 @@ new g_infoZombieClass[MAX_CLASSES + 1][infoClass];
 new	g_iCvar_HudType,
 	g_iCvar_HudColor[Color],
 	g_iCvar_ZombieRatio,
-	g_iCvar_TimeRestartGame;
+	g_iCvar_TimeRestartGame,
+	g_iCvar_GiveHealthIntected;
 
 new	bool: g_bCvar_SaveEquipment,
 	bool: g_bCvar_BlockZombieFlashlight,
 	bool: g_bCvar_GetZombieDamageFalling,
-	bool: g_bCvar_IfLastZombieDisconnect,
+	bool: g_bCvar_GetHumansDamageGrenade,
 	bool: g_bCvar_StateKnockbackSitZombie;
 
 new	Float: g_fCvar_TimeInfections,
@@ -1104,10 +1105,11 @@ Cvars_Cfg()	{
 		iCvarId_TimeInfections,
 		iCvarId_GameDescription,
 		iCvarId_TimeRestartGame,
+		iCvarId_GiveHealthIntected,
 		iCvarId_MaxDistanceKnockback,
 		iCvarId_BlockZombieFlashlight,
 		iCvarId_GetZombieDamageFalling,
-		iCvarId_IfLastZombieDisconnect,
+		iCvarId_GetHumansDamageGrenade,
 		iCvarId_StateKnockbackSitZombie;
 
 	iCvarId_HudType                 = register_cvar("zmb_hud_type",                     "0");
@@ -1119,10 +1121,11 @@ Cvars_Cfg()	{
 	iCvarId_TimeInfections          = register_cvar("zmb_time_infections",              "15");
 	iCvarId_GameDescription         = register_cvar("zmb_game_description",             "[ZMB] by 81x08");
 	iCvarId_TimeRestartGame         = register_cvar("zmb_time_restart_game",            "15");
-	iCvarId_MaxDistanceKnockback    = register_cvar("zmb_min_distance_knockback",       "500");
+	iCvarId_GiveHealthIntected      = register_cvar("zmb_give_health_for_intected",     "175");
+	iCvarId_MaxDistanceKnockback    = register_cvar("zmb_max_distance_knockback",       "500");
 	iCvarId_BlockZombieFlashlight   = register_cvar("zmb_block_zombie_flashlight",      "1");
 	iCvarId_GetZombieDamageFalling  = register_cvar("zmb_zombie_get_damage_falling",    "1");
-	iCvarId_IfLastZombieDisconnect = register_cvar("zmb_if_last_zombie_disconnect",    "1");
+	iCvarId_GetHumansDamageGrenade  = register_cvar("zmb_humans_get_damage_grenade",    "1");
 	iCvarId_StateKnockbackSitZombie = register_cvar("zmb_state_knockback_sit_zombie",   "1");
 
  	new szFileDir[128];
@@ -1153,11 +1156,12 @@ Cvars_Cfg()	{
 	g_iCvar_HudColor                = UTIL_ParseHEXColor(szColor);
 	g_iCvar_ZombieRatio             = get_pcvar_num(iCvarId_ZombieRatio);
 	g_iCvar_TimeRestartGame         = get_pcvar_num(iCvarId_TimeRestartGame);
+	g_iCvar_GiveHealthIntected      = get_pcvar_num(iCvarId_GiveHealthIntected);
 	
 	g_bCvar_SaveEquipment           = bool: get_pcvar_num(iCvarId_SaveEquipment);
 	g_bCvar_BlockZombieFlashlight   = bool: get_pcvar_num(iCvarId_BlockZombieFlashlight);
 	g_bCvar_GetZombieDamageFalling  = bool: get_pcvar_num(iCvarId_GetZombieDamageFalling);
-	g_bCvar_IfLastZombieDisconnect = bool: get_pcvar_num(iCvarId_IfLastZombieDisconnect);
+	g_bCvar_GetHumansDamageGrenade  = bool: get_pcvar_num(iCvarId_GetHumansDamageGrenade);
 	g_bCvar_StateKnockbackSitZombie = bool: get_pcvar_num(iCvarId_StateKnockbackSitZombie);
 	
 	new szPosition[Positon][8], szCvarPosition[16];
@@ -1243,10 +1247,7 @@ public client_disconnect(iIndex)	{
 			{
 				if(g_iAliveHumans == 1)
 				{
-					if(g_bCvar_IfLastZombieDisconnect)
-					{
-						rg_round_end(1.0, WINSTATUS_CTS, ROUND_CTS_WIN);
-					}
+					rg_round_end(1.0, WINSTATUS_CTS, ROUND_CTS_WIN);
 				}
 				else if(g_iAliveHumans > 1)
 				{
@@ -1258,6 +1259,17 @@ public client_disconnect(iIndex)	{
 	else
 	{
 		g_iAliveHumans--;
+		
+		if(g_bInfectionBegan)
+		{
+			if(g_iAliveHumans == 0)
+			{
+				if(g_iAliveZombies)
+				{
+					rg_round_end(1.0, WINSTATUS_TERRORISTS, ROUND_TERRORISTS_WIN);
+				}
+			}
+		}
 	}
 
 	for(new iCount = BIT_NONE; iCount < BIT_MAX; iCount++)
@@ -1603,6 +1615,26 @@ public HC_CBasePlayer_TakeDamage_Pre(const iVictim, const iWeaponId, const iAtta
 		}
 	}
 	
+	if(IsSetBit(gp_iBit[BIT_HUMAN], iVictim) && iVictim == iAttacker)
+	{
+		if(bitsDamageType == DMG_GRENADE)
+		{
+			if(!(g_bInfectionBegan))
+			{
+				SetHookChainReturn(ATYPE_INTEGER, 0);
+				
+				return HC_SUPERCEDE;
+			}
+			
+			if(!(g_bCvar_GetHumansDamageGrenade))
+			{
+				SetHookChainReturn(ATYPE_INTEGER, 0);
+				
+				return HC_SUPERCEDE;
+			}
+		}
+	}
+	
 	return HC_CONTINUE;
 }
 
@@ -1658,8 +1690,22 @@ public HC_CBasePlayer_TraceAttack_Pre(const iVictim, const iAttacker, Float: fDa
 			else
 			{
 				setPlayerInfect(iVictim);
-			
+
 				set_entvar(iAttacker, var_frags, get_entvar(iAttacker, var_frags) + 1);
+				
+				if(g_iCvar_GiveHealthIntected > 0)
+				{
+					new Float: fHealth = get_entvar(iAttacker, var_health);
+					
+					if(fHealth + g_iCvar_GiveHealthIntected > g_infoZombieClass[gp_iClass[iAttacker]][CLASS_HEALTH])
+					{
+						set_entvar(iAttacker, var_health, g_infoZombieClass[gp_iClass[iAttacker]][CLASS_HEALTH]);
+					}
+					else 
+					{
+						set_entvar(iAttacker, var_health, fHealth + g_infoZombieClass[gp_iClass[iAttacker]][CLASS_HEALTH]);
+					}
+				}
 			}
 		}
 		
