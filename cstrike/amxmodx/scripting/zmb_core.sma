@@ -14,7 +14,7 @@
 #pragma semicolon                    1
 
 #define PLUGIN_NAME                  "[ZMB] Core"
-#define PLUGIN_VERS                  "0.1.2"
+#define PLUGIN_VERS                  "0.1.2a"
 #define PLUGIN_AUTH                  "81x08"
 
 #define MAX_PLAYERS                  32
@@ -126,6 +126,7 @@ new g_infoZombieClass[MAX_CLASSES + 1][infoClass];
 new	g_iCvar_HudType,
 	g_iCvar_HudColor[Color],
 	g_iCvar_ZombieRatio,
+	g_iCvar_GrenadeForKill,
 	g_iCvar_TimeRestartGame,
 	g_iCvar_GiveHealthIntected;
 
@@ -1103,6 +1104,7 @@ Cvars_Cfg()	{
 		iCvarId_MapLightStyle,
 		iCvarId_SaveEquipment,
 		iCvarId_TimeInfections,
+		iCvarId_GrenadeForKill,
 		iCvarId_GameDescription,
 		iCvarId_TimeRestartGame,
 		iCvarId_GiveHealthIntected,
@@ -1119,6 +1121,7 @@ Cvars_Cfg()	{
 	iCvarId_MapLightStyle           = register_cvar("zmb_map_lightstyle",               "d");
 	iCvarId_SaveEquipment           = register_cvar("zmb_save_equipment",               "0");
 	iCvarId_TimeInfections          = register_cvar("zmb_time_infections",              "15");
+	iCvarId_GrenadeForKill          = register_cvar("zmb_granade_for_kill",             "1");
 	iCvarId_GameDescription         = register_cvar("zmb_game_description",             "[ZMB] by 81x08");
 	iCvarId_TimeRestartGame         = register_cvar("zmb_time_restart_game",            "15");
 	iCvarId_GiveHealthIntected      = register_cvar("zmb_give_health_for_intected",     "175");
@@ -1155,6 +1158,7 @@ Cvars_Cfg()	{
 	g_iCvar_HudType                 = get_pcvar_num(iCvarId_HudType);
 	g_iCvar_HudColor                = UTIL_ParseHEXColor(szColor);
 	g_iCvar_ZombieRatio             = get_pcvar_num(iCvarId_ZombieRatio);
+	g_iCvar_GrenadeForKill          = get_pcvar_num(iCvarId_GrenadeForKill);
 	g_iCvar_TimeRestartGame         = get_pcvar_num(iCvarId_TimeRestartGame);
 	g_iCvar_GiveHealthIntected      = get_pcvar_num(iCvarId_GiveHealthIntected);
 	
@@ -1578,8 +1582,26 @@ public HC_CBasePlayer_Killed_Post(const iVictim, const iAttacker)	{
 		{
 			setPlayerNightVision(iVictim, false);
 		}
+		
+		if(IsSetBit(gp_iBit[BIT_HUMAN], iAttacker))
+		{
+			switch(g_iCvar_GrenadeForKill)
+			{
+				case 1:
+				{
+					rg_give_item(iAttacker, "weapon_hegrenade", GT_REPLACE);
+				}
+				case 2:
+				{
+                    rg_give_item(iAttacker, "weapon_flashbang", GT_REPLACE);
+                    rg_give_item(iAttacker, "weapon_flashbang", GT_REPLACE);
+                    rg_give_item(iAttacker, "weapon_hegrenade", GT_REPLACE);
+                    rg_give_item(iAttacker, "weapon_smokegrenade", GT_REPLACE);
+				}
+			}
+		}
 	}
-	else
+	else if (IsSetBit(gp_iBit[BIT_HUMAN], iVictim))
 	{
 		g_iAliveHumans--;
 		
